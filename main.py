@@ -17,4 +17,8 @@ classificador = ClassificadorPorConteudo()
 
 resultado = classificador.classificar(empresa, perfil)
 
-print("Pontuação da empresa:", resultado)
+print("Pontuação:", resultado["pontuacao"])
+
+print("\nJustificativas:")
+for justificativa in resultado["justificativas"]:
+    print("-", justificativa)
