@@ -2,7 +2,7 @@ import { Radar } from 'lucide-react'
 
 export default function Inicio() {
   return (
-    <main className="grid min-h-dvh place-items-center bg-slate-950 px-6 py-12 text-center text-slate-50">
+    <main className="grid flex-1 place-items-center px-6 py-12 text-center">
       <div>
         <Radar
           aria-hidden="true"
