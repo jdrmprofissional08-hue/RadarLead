@@ -70,3 +70,36 @@ class Perfil:
             "peso_porte": self.peso_porte,
             "peso_localizacao": self.peso_localizacao,
         }
+
+    @classmethod
+    def from_dict(cls, dados: dict) -> "Perfil":
+        """Recria um Perfil a partir do formato de to_dict() (usado no JSON)."""
+        obrigatorios = (
+            "nome", "cnaes_desejados", "porte_desejado", "municipio_alvo_ibge"
+        )
+
+        if not isinstance(dados, dict):
+            raise PerfilInvalidoError("Os dados do perfil devem ser um dicionário")
+
+        faltando = [chave for chave in obrigatorios if chave not in dados]
+        if faltando:
+            raise PerfilInvalidoError(f"Campos obrigatórios ausentes: {faltando}")
+
+        try:
+            perfil_id = (
+                None if dados.get("id") is None
+                else validacao.validar_inteiro(dados["id"], "Id do perfil")
+            )
+        except ValueError as erro:
+            raise PerfilInvalidoError(str(erro)) from erro
+
+        return cls(
+            nome=dados["nome"],
+            cnaes_desejados=dados["cnaes_desejados"],
+            porte_desejado=dados["porte_desejado"],
+            municipio_alvo_ibge=dados["municipio_alvo_ibge"],
+            peso_cnae=dados.get("peso_cnae", 50),
+            peso_porte=dados.get("peso_porte", 25),
+            peso_localizacao=dados.get("peso_localizacao", 25),
+            id=perfil_id,
+        )

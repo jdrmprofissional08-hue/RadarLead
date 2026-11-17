@@ -1,8 +1,10 @@
 import unittest
+from datetime import datetime
 
 from src.dominio.empresa import Empresa
 from src.dominio.lead import Lead, StatusLead
 from src.dominio.perfil import Perfil
+from src.dominio.prospeccao import Prospeccao
 from src.excecoes import (
     DadosInvalidosError,
     EmpresaInvalidaError,
@@ -180,6 +182,95 @@ class TestLead(unittest.TestCase):
             with self.subTest(nome):
                 with self.assertRaises(DadosInvalidosError):
                     Lead.de_recomendacao(item)
+
+
+class TestSerializacao(unittest.TestCase):
+    """to_dict / from_dict: o que o repositório JSON usa para gravar e ler."""
+
+    def test_perfil_ida_e_volta(self):
+        perfil = perfil_valido(peso_cnae=70, peso_porte=20, peso_localizacao=10)
+        perfil.id = 4
+
+        self.assertEqual(Perfil.from_dict(perfil.to_dict()), perfil)
+
+    def test_perfil_from_dict_sem_pesos_usa_os_padroes(self):
+        perfil = Perfil.from_dict({
+            "nome": "A",
+            "cnaes_desejados": ["6204000"],
+            "porte_desejado": 3,
+            "municipio_alvo_ibge": "5208707",
+        })
+        self.assertEqual(
+            (perfil.peso_cnae, perfil.peso_porte, perfil.peso_localizacao),
+            (50, 25, 25),
+        )
+        self.assertIsNone(perfil.id)
+
+    def test_perfil_from_dict_invalido(self):
+        base = perfil_valido().to_dict()
+        casos = {
+            "nao e dicionario": None,
+            "campo ausente": {"nome": "A"},
+            "id booleano": {**base, "id": True},
+            "id texto": {**base, "id": "1"},
+            "campo invalido": {**base, "porte_desejado": "x"},
+        }
+        for nome, dados in casos.items():
+            with self.subTest(nome):
+                with self.assertRaises(PerfilInvalidoError):
+                    Perfil.from_dict(dados)
+
+    def test_empresa_ida_e_volta(self):
+        empresa = empresa_valida(
+            cnaes_secundarios=["4520001"], cep="75700000",
+            latitude=-18.16, longitude=-47.94,
+        )
+        self.assertEqual(Empresa.from_dict(empresa.to_dict()), empresa)
+
+    def test_lead_ida_e_volta_com_status(self):
+        lead = Lead("11111111000111", "A", 75.5, ["ok"], StatusLead.CONVERTIDO)
+        self.assertEqual(Lead.from_dict(lead.to_dict()), lead)
+        self.assertEqual(lead.to_dict()["status"], "convertido")
+
+    def test_lead_from_dict_sem_status_e_novo(self):
+        lead = Lead.from_dict({"cnpj": "11111111000111", "pontuacao": 1})
+        self.assertEqual(lead.status, StatusLead.NOVO)
+
+    def test_lead_from_dict_status_invalido(self):
+        for status in ("inventado", 3, ["novo"]):
+            with self.subTest(status=status):
+                with self.assertRaises(DadosInvalidosError):
+                    Lead.from_dict({
+                        "cnpj": "11111111000111", "pontuacao": 1, "status": status,
+                    })
+
+    def test_prospeccao_ida_e_volta(self):
+        prospeccao = Prospeccao(
+            perfil_id=2,
+            leads=[Lead("11111111000111", "A", 100, ["x"], StatusLead.CONTATADO)],
+            total_empresas_avaliadas=7,
+            criada_em=datetime(2026, 11, 17, 18, 30, 5, 123456),
+            id=9,
+        )
+        self.assertEqual(Prospeccao.from_dict(prospeccao.to_dict()), prospeccao)
+
+    def test_prospeccao_from_dict_invalida(self):
+        base = Prospeccao(perfil_id=1).to_dict()
+        casos = {
+            "nao e dicionario": [],
+            "campo ausente": {"perfil_id": 1},
+            "perfil_id texto": {**base, "perfil_id": "1"},
+            "total negativo": {**base, "total_empresas_avaliadas": -1},
+            "id texto": {**base, "id": "1"},
+            "data invalida": {**base, "criada_em": "ontem"},
+            "data nao e texto": {**base, "criada_em": 20261117},
+            "leads nao e lista": {**base, "leads": {}},
+            "lead invalido": {**base, "leads": [{"cnpj": "123"}]},
+        }
+        for nome, dados in casos.items():
+            with self.subTest(nome):
+                with self.assertRaises(DadosInvalidosError):
+                    Prospeccao.from_dict(dados)
 
 
 if __name__ == "__main__":

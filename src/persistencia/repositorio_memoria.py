@@ -58,7 +58,9 @@ class RepositorioMemoria(Repositorio):
         return empresa
 
     def salvar_empresas(self, empresas: list[Empresa]) -> list[Empresa]:
-        return [self.salvar_empresa(e) for e in empresas]
+        # chama a versão desta classe de propósito: subclasses (como a do JSON)
+        # podem gravar em disco em salvar_empresa, e aqui queremos uma gravação só
+        return [RepositorioMemoria.salvar_empresa(self, e) for e in empresas]
 
     def buscar_empresa(self, cnpj: str) -> Empresa:
         if cnpj not in self._empresas:

@@ -71,3 +71,26 @@ class Lead:
             pontuacao=pontuacao,
             justificativas=[str(j) for j in justificativas],
         )
+
+    def to_dict(self) -> dict:
+        return {
+            "cnpj": self.cnpj,
+            "razao_social": self.razao_social,
+            "pontuacao": self.pontuacao,
+            "justificativas": list(self.justificativas),
+            "status": StatusLead(self.status).value,
+        }
+
+    @classmethod
+    def from_dict(cls, dados: dict) -> "Lead":
+        """Recria um Lead a partir do formato de to_dict() (usado no JSON)."""
+        lead = cls.de_recomendacao(dados)
+
+        try:
+            lead.status = StatusLead(dados.get("status", StatusLead.NOVO.value))
+        except (ValueError, TypeError) as erro:
+            raise DadosInvalidosError(
+                f"Status de lead inválido: {dados.get('status')!r}"
+            ) from erro
+
+        return lead

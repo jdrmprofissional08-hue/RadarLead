@@ -1,4 +1,13 @@
+"""Testes de contrato do Repositorio.
+
+As mesmas verificações rodam contra cada implementação (memória e JSON).
+Quando o repositório PostgreSQL existir, basta criar mais um trio de
+classes no fim do arquivo com o seu criar_repositorio().
+"""
+
+import tempfile
 import unittest
+from pathlib import Path
 
 from src.dominio.empresa import Empresa
 from src.dominio.lead import Lead
@@ -9,6 +18,7 @@ from src.excecoes import (
     PerfilNaoEncontradoError,
     ProspeccaoNaoEncontradaError,
 )
+from src.persistencia.repositorio_json import RepositorioJson
 from src.persistencia.repositorio_memoria import RepositorioMemoria
 
 
@@ -31,10 +41,17 @@ def nova_empresa(cnpj="11111111000111", razao_social="Empresa A"):
     )
 
 
-class TestPerfis(unittest.TestCase):
+def nova_prospeccao(perfil_id=1):
+    lead = Lead(cnpj="11111111000111", razao_social="A", pontuacao=50)
+    return Prospeccao(perfil_id=perfil_id, leads=[lead])
+
+
+# --- O contrato (mixins: não rodam sozinhos, só nas classes concretas) --------
+
+class ContratoPerfis:
 
     def setUp(self):
-        self.repo = RepositorioMemoria()
+        self.repo = self.criar_repositorio()
 
     def test_salvar_atribui_ids_sequenciais(self):
         a = self.repo.salvar_perfil(novo_perfil("A"))
@@ -87,10 +104,10 @@ class TestPerfis(unittest.TestCase):
         self.assertEqual(self.repo.buscar_perfil(perfil.id).nome, "A")
 
 
-class TestEmpresas(unittest.TestCase):
+class ContratoEmpresas:
 
     def setUp(self):
-        self.repo = RepositorioMemoria()
+        self.repo = self.criar_repositorio()
 
     def test_salvar_e_buscar(self):
         self.repo.salvar_empresa(nova_empresa())
@@ -128,17 +145,13 @@ class TestEmpresas(unittest.TestCase):
         )
 
 
-class TestProspeccoes(unittest.TestCase):
+class ContratoProspeccoes:
 
     def setUp(self):
-        self.repo = RepositorioMemoria()
-
-    def nova_prospeccao(self, perfil_id=1):
-        lead = Lead(cnpj="11111111000111", razao_social="A", pontuacao=50)
-        return Prospeccao(perfil_id=perfil_id, leads=[lead])
+        self.repo = self.criar_repositorio()
 
     def test_salvar_atribui_id_e_busca(self):
-        salva = self.repo.salvar_prospeccao(self.nova_prospeccao())
+        salva = self.repo.salvar_prospeccao(nova_prospeccao())
         self.assertEqual(salva.id, 1)
 
         buscada = self.repo.buscar_prospeccao(1)
@@ -149,20 +162,60 @@ class TestProspeccoes(unittest.TestCase):
             self.repo.buscar_prospeccao(7)
 
     def test_listar_filtrando_por_perfil(self):
-        self.repo.salvar_prospeccao(self.nova_prospeccao(perfil_id=1))
-        self.repo.salvar_prospeccao(self.nova_prospeccao(perfil_id=2))
-        self.repo.salvar_prospeccao(self.nova_prospeccao(perfil_id=1))
+        self.repo.salvar_prospeccao(nova_prospeccao(perfil_id=1))
+        self.repo.salvar_prospeccao(nova_prospeccao(perfil_id=2))
+        self.repo.salvar_prospeccao(nova_prospeccao(perfil_id=1))
 
         self.assertEqual(len(self.repo.listar_prospeccoes()), 3)
         self.assertEqual(len(self.repo.listar_prospeccoes(perfil_id=1)), 2)
         self.assertEqual(self.repo.listar_prospeccoes(perfil_id=9), [])
 
     def test_alterar_lead_buscado_nao_muda_o_repositorio(self):
-        self.repo.salvar_prospeccao(self.nova_prospeccao())
+        self.repo.salvar_prospeccao(nova_prospeccao())
         buscada = self.repo.buscar_prospeccao(1)
         buscada.leads[0].pontuacao = 0
 
         self.assertEqual(self.repo.buscar_prospeccao(1).leads[0].pontuacao, 50)
+
+
+# --- Como criar o repositório de cada implementação ---------------------------
+
+class UsaMemoria:
+    def criar_repositorio(self):
+        return RepositorioMemoria()
+
+
+class UsaJson:
+    def criar_repositorio(self):
+        pasta = tempfile.TemporaryDirectory()
+        self.addCleanup(pasta.cleanup)
+        return RepositorioJson(Path(pasta.name) / "dados.json")
+
+
+# --- Classes concretas (são estas que o unittest executa) ---------------------
+
+class TestPerfisMemoria(UsaMemoria, ContratoPerfis, unittest.TestCase):
+    pass
+
+
+class TestEmpresasMemoria(UsaMemoria, ContratoEmpresas, unittest.TestCase):
+    pass
+
+
+class TestProspeccoesMemoria(UsaMemoria, ContratoProspeccoes, unittest.TestCase):
+    pass
+
+
+class TestPerfisJson(UsaJson, ContratoPerfis, unittest.TestCase):
+    pass
+
+
+class TestEmpresasJson(UsaJson, ContratoEmpresas, unittest.TestCase):
+    pass
+
+
+class TestProspeccoesJson(UsaJson, ContratoProspeccoes, unittest.TestCase):
+    pass
 
 
 if __name__ == "__main__":

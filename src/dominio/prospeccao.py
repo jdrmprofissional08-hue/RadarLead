@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+from src.dominio import validacao
 from src.dominio.lead import Lead
+from src.excecoes import DadosInvalidosError
 
 
 @dataclass
@@ -16,3 +18,56 @@ class Prospeccao:
     total_empresas_avaliadas: int = 0
     criada_em: datetime = field(default_factory=datetime.now)
     id: Optional[int] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "perfil_id": self.perfil_id,
+            "total_empresas_avaliadas": self.total_empresas_avaliadas,
+            "criada_em": self.criada_em.isoformat(),
+            "leads": [lead.to_dict() for lead in self.leads],
+        }
+
+    @classmethod
+    def from_dict(cls, dados: dict) -> "Prospeccao":
+        """Recria uma Prospeccao a partir do formato de to_dict() (usado no JSON)."""
+        if not isinstance(dados, dict):
+            raise DadosInvalidosError("Os dados da prospecção devem ser um dicionário")
+
+        faltando = [
+            chave for chave in ("perfil_id", "criada_em", "leads")
+            if chave not in dados
+        ]
+        if faltando:
+            raise DadosInvalidosError(f"Campos obrigatórios ausentes: {faltando}")
+
+        if not isinstance(dados["leads"], list):
+            raise DadosInvalidosError("Os leads devem ser uma lista")
+
+        try:
+            perfil_id = validacao.validar_inteiro(dados["perfil_id"], "Id do perfil")
+            total = validacao.validar_inteiro(
+                dados.get("total_empresas_avaliadas", 0),
+                "Total de empresas avaliadas",
+            )
+            if total < 0:
+                raise ValueError("Total de empresas avaliadas não pode ser negativo")
+
+            prospeccao_id = (
+                None if dados.get("id") is None
+                else validacao.validar_inteiro(dados["id"], "Id da prospecção")
+            )
+
+            if not isinstance(dados["criada_em"], str):
+                raise ValueError("A data de criação deve ser um texto ISO 8601")
+            criada_em = datetime.fromisoformat(dados["criada_em"])
+        except ValueError as erro:
+            raise DadosInvalidosError(str(erro)) from erro
+
+        return cls(
+            perfil_id=perfil_id,
+            leads=[Lead.from_dict(item) for item in dados["leads"]],
+            total_empresas_avaliadas=total,
+            criada_em=criada_em,
+            id=prospeccao_id,
+        )
