@@ -65,10 +65,10 @@ class TestServicoPerfil(unittest.TestCase):
 
     def test_cadastrar_com_pesos_personalizados(self):
         perfil = self.servico.cadastrar(
-            **DADOS_PERFIL, peso_cnae=70, peso_porte=20, peso_localizacao=10
+            **DADOS_PERFIL, peso_segmento=70, peso_porte=20, peso_localizacao=10
         )
         self.assertEqual(
-            (perfil.peso_cnae, perfil.peso_porte, perfil.peso_localizacao),
+            (perfil.peso_segmento, perfil.peso_porte, perfil.peso_localizacao),
             (70, 20, 10),
         )
 

@@ -51,6 +51,10 @@ class Lead:
             or not math.isfinite(pontuacao)
         ):
             raise DadosInvalidosError(f"Pontuação inválida: {pontuacao!r}")
+        if not 0 <= pontuacao <= 100:
+            raise DadosInvalidosError(
+                f"Pontuação deve estar entre 0 e 100, recebido: {pontuacao!r}"
+            )
 
         justificativas = item.get("justificativas") or []
         if isinstance(justificativas, str):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -15,9 +16,11 @@ class Perfil:
     cnaes_desejados: list[str]
     porte_desejado: int
     municipio_alvo_ibge: str
-    peso_cnae: float = 50
+    peso_segmento: float = 50
     peso_porte: float = 25
     peso_localizacao: float = 25
+    capital_minimo: float = 0
+    empresa_usuaria_id: Optional[int] = None
     id: Optional[int] = None
 
     def __post_init__(self):
@@ -39,12 +42,22 @@ class Perfil:
                 self.municipio_alvo_ibge
             )
             self._validar_pesos()
+            self._validar_capital_minimo()
+            if self.empresa_usuaria_id is not None:
+                self.empresa_usuaria_id = validacao.validar_inteiro(
+                    self.empresa_usuaria_id, "Id da empresa usuária"
+                )
         except ValueError as erro:
             raise PerfilInvalidoError(str(erro)) from erro
 
+    @property
+    def peso_cnae(self) -> float:
+        """Nome antigo de peso_segmento (o recomendador ainda usa este nome)."""
+        return self.peso_segmento
+
     def _validar_pesos(self):
         pesos = {
-            "Peso do CNAE": self.peso_cnae,
+            "Peso do segmento": self.peso_segmento,
             "Peso do porte": self.peso_porte,
             "Peso da localização": self.peso_localizacao,
         }
@@ -52,11 +65,25 @@ class Perfil:
         for nome, valor in pesos.items():
             if isinstance(valor, bool) or not isinstance(valor, (int, float)):
                 raise ValueError(f"{nome} deve ser um número, recebido: {valor!r}")
-            if valor < 0:
-                raise ValueError(f"{nome} não pode ser negativo, recebido: {valor!r}")
+            if not math.isfinite(valor) or not 0 <= valor <= 100:
+                raise ValueError(f"{nome} deve estar entre 0 e 100, recebido: {valor!r}")
+            if round(valor, 2) != valor:
+                raise ValueError(
+                    f"{nome} aceita no máximo 2 casas decimais, recebido: {valor!r}"
+                )
 
-        if sum(pesos.values()) <= 0:
-            raise ValueError("A soma dos pesos deve ser maior que zero")
+        # mesma regra do CHECK do banco (soma dos três pesos = 100)
+        if not math.isclose(sum(pesos.values()), 100, abs_tol=1e-9):
+            raise ValueError(
+                f"A soma dos pesos deve ser 100, recebido: {sum(pesos.values())!r}"
+            )
+
+    def _validar_capital_minimo(self):
+        valor = self.capital_minimo
+        if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+            raise ValueError(f"Capital mínimo deve ser um número, recebido: {valor!r}")
+        if not math.isfinite(valor) or valor < 0:
+            raise ValueError(f"Capital mínimo não pode ser negativo, recebido: {valor!r}")
 
     def to_dict(self) -> dict:
         """Formato esperado pelos recomendadores (chaves do contrato do José)."""
@@ -66,9 +93,12 @@ class Perfil:
             "cnaes_desejados": list(self.cnaes_desejados),
             "porte_desejado": self.porte_desejado,
             "municipio_alvo_ibge": self.municipio_alvo_ibge,
-            "peso_cnae": self.peso_cnae,
+            "peso_segmento": self.peso_segmento,
+            "peso_cnae": self.peso_segmento,  # nome do contrato antigo
             "peso_porte": self.peso_porte,
             "peso_localizacao": self.peso_localizacao,
+            "capital_minimo": self.capital_minimo,
+            "empresa_usuaria_id": self.empresa_usuaria_id,
         }
 
     @classmethod
@@ -98,8 +128,11 @@ class Perfil:
             cnaes_desejados=dados["cnaes_desejados"],
             porte_desejado=dados["porte_desejado"],
             municipio_alvo_ibge=dados["municipio_alvo_ibge"],
-            peso_cnae=dados.get("peso_cnae", 50),
+            # aceita o nome novo (peso_segmento) e o antigo (peso_cnae)
+            peso_segmento=dados.get("peso_segmento", dados.get("peso_cnae", 50)),
             peso_porte=dados.get("peso_porte", 25),
             peso_localizacao=dados.get("peso_localizacao", 25),
+            capital_minimo=dados.get("capital_minimo", 0),
+            empresa_usuaria_id=dados.get("empresa_usuaria_id"),
             id=perfil_id,
         )

@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 
 from src.dominio import validacao
 from src.dominio.lead import Lead
 from src.excecoes import DadosInvalidosError
+
+
+class StatusProspeccao(str, Enum):
+    EM_ANDAMENTO = "em_andamento"
+    CONCLUIDA = "concluida"
+    ERRO = "erro"
 
 
 @dataclass
@@ -17,6 +24,7 @@ class Prospeccao:
     leads: list[Lead] = field(default_factory=list)
     total_empresas_avaliadas: int = 0
     criada_em: datetime = field(default_factory=datetime.now)
+    status: StatusProspeccao = StatusProspeccao.CONCLUIDA
     id: Optional[int] = None
 
     def to_dict(self) -> dict:
@@ -25,6 +33,7 @@ class Prospeccao:
             "perfil_id": self.perfil_id,
             "total_empresas_avaliadas": self.total_empresas_avaliadas,
             "criada_em": self.criada_em.isoformat(),
+            "status": StatusProspeccao(self.status).value,
             "leads": [lead.to_dict() for lead in self.leads],
         }
 
@@ -61,7 +70,10 @@ class Prospeccao:
             if not isinstance(dados["criada_em"], str):
                 raise ValueError("A data de criação deve ser um texto ISO 8601")
             criada_em = datetime.fromisoformat(dados["criada_em"])
-        except ValueError as erro:
+            status = StatusProspeccao(
+                dados.get("status", StatusProspeccao.CONCLUIDA.value)
+            )
+        except (ValueError, TypeError) as erro:
             raise DadosInvalidosError(str(erro)) from erro
 
         return cls(
@@ -69,5 +81,6 @@ class Prospeccao:
             leads=[Lead.from_dict(item) for item in dados["leads"]],
             total_empresas_avaliadas=total,
             criada_em=criada_em,
+            status=status,
             id=prospeccao_id,
         )

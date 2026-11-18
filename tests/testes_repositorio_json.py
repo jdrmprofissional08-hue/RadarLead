@@ -66,7 +66,7 @@ class TestPersistenciaEntreExecucoes(BaseJson):
     def test_dados_sobrevivem_a_uma_nova_instancia(self):
         repo = self.abrir()
         perfil = repo.salvar_perfil(
-            novo_perfil(peso_cnae=70, peso_porte=20, peso_localizacao=10)
+            novo_perfil(peso_segmento=70, peso_porte=20, peso_localizacao=10)
         )
         empresa = nova_empresa(
             cnaes_secundarios=["4520001"],

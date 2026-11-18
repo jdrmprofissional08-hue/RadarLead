@@ -4,7 +4,7 @@ from datetime import datetime
 from src.dominio.empresa import Empresa
 from src.dominio.lead import Lead, StatusLead
 from src.dominio.perfil import Perfil
-from src.dominio.prospeccao import Prospeccao
+from src.dominio.prospeccao import Prospeccao, StatusProspeccao
 from src.excecoes import (
     DadosInvalidosError,
     EmpresaInvalidaError,
@@ -95,7 +95,7 @@ class TestPerfil(unittest.TestCase):
     def test_perfil_valido_tem_pesos_padrao(self):
         perfil = perfil_valido()
         self.assertEqual(
-            (perfil.peso_cnae, perfil.peso_porte, perfil.peso_localizacao),
+            (perfil.peso_segmento, perfil.peso_porte, perfil.peso_localizacao),
             (50, 25, 25),
         )
         self.assertIsNone(perfil.id)
@@ -112,11 +112,22 @@ class TestPerfil(unittest.TestCase):
             "cnae invalido": {"cnaes_desejados": ["abc"]},
             "porte texto": {"porte_desejado": "3"},
             "ibge invalido": {"municipio_alvo_ibge": "123"},
-            "peso negativo": {"peso_cnae": -1},
+            "peso negativo": {"peso_segmento": -1},
             "peso texto": {"peso_porte": "25"},
             "pesos zerados": {
-                "peso_cnae": 0, "peso_porte": 0, "peso_localizacao": 0
+                "peso_segmento": 0, "peso_porte": 0, "peso_localizacao": 0
             },
+            "pesos nao somam 100": {"peso_segmento": 60},
+            "peso acima de 100": {
+                "peso_segmento": 110, "peso_porte": -5, "peso_localizacao": -5
+            },
+            "peso com 3 casas": {
+                "peso_segmento": 33.333, "peso_porte": 33.333,
+                "peso_localizacao": 33.334,
+            },
+            "capital negativo": {"capital_minimo": -1},
+            "capital texto": {"capital_minimo": "10"},
+            "empresa usuaria texto": {"empresa_usuaria_id": "1"},
         }
         for nome, alteracao in casos.items():
             with self.subTest(nome):
@@ -124,8 +135,33 @@ class TestPerfil(unittest.TestCase):
                     perfil_valido(**alteracao)
 
     def test_um_peso_zero_e_permitido(self):
-        perfil = perfil_valido(peso_localizacao=0)
+        perfil = perfil_valido(peso_segmento=75, peso_localizacao=0)
         self.assertEqual(perfil.peso_localizacao, 0)
+
+    def test_pesos_com_decimais_que_somam_100(self):
+        perfil = perfil_valido(
+            peso_segmento=33.33, peso_porte=33.33, peso_localizacao=33.34
+        )
+        self.assertEqual(perfil.peso_localizacao, 33.34)
+
+    def test_campos_novos_tem_padrao(self):
+        perfil = perfil_valido()
+        self.assertEqual(perfil.capital_minimo, 0)
+        self.assertIsNone(perfil.empresa_usuaria_id)
+
+    def test_peso_cnae_e_alias_de_peso_segmento(self):
+        perfil = perfil_valido(peso_segmento=70, peso_porte=20, peso_localizacao=10)
+        self.assertEqual(perfil.peso_cnae, 70)
+        self.assertEqual(perfil.to_dict()["peso_cnae"], 70)
+        self.assertEqual(perfil.to_dict()["peso_segmento"], 70)
+
+    def test_from_dict_aceita_o_nome_antigo_peso_cnae(self):
+        perfil = Perfil.from_dict({
+            "nome": "A", "cnaes_desejados": ["6204000"], "porte_desejado": 3,
+            "municipio_alvo_ibge": "5208707",
+            "peso_cnae": 70, "peso_porte": 20, "peso_localizacao": 10,
+        })
+        self.assertEqual(perfil.peso_segmento, 70)
 
     def test_to_dict_tem_chaves_do_contrato_do_recomendador(self):
         dados = perfil_valido().to_dict()
@@ -173,6 +209,8 @@ class TestLead(unittest.TestCase):
             "pontuacao texto": {"cnpj": "11111111000111", "pontuacao": "10"},
             "pontuacao booleana": {"cnpj": "11111111000111", "pontuacao": True},
             "pontuacao nan": {"cnpj": "11111111000111", "pontuacao": float("nan")},
+            "pontuacao acima de 100": {"cnpj": "11111111000111", "pontuacao": 100.5},
+            "pontuacao negativa": {"cnpj": "11111111000111", "pontuacao": -1},
             "cnpj invalido": {"cnpj": "123", "pontuacao": 10},
             "justificativas invalidas": {
                 "cnpj": "11111111000111", "pontuacao": 10, "justificativas": 5
@@ -188,7 +226,7 @@ class TestSerializacao(unittest.TestCase):
     """to_dict / from_dict: o que o repositório JSON usa para gravar e ler."""
 
     def test_perfil_ida_e_volta(self):
-        perfil = perfil_valido(peso_cnae=70, peso_porte=20, peso_localizacao=10)
+        perfil = perfil_valido(peso_segmento=70, peso_porte=20, peso_localizacao=10)
         perfil.id = 4
 
         self.assertEqual(Perfil.from_dict(perfil.to_dict()), perfil)
@@ -201,7 +239,7 @@ class TestSerializacao(unittest.TestCase):
             "municipio_alvo_ibge": "5208707",
         })
         self.assertEqual(
-            (perfil.peso_cnae, perfil.peso_porte, perfil.peso_localizacao),
+            (perfil.peso_segmento, perfil.peso_porte, perfil.peso_localizacao),
             (50, 25, 25),
         )
         self.assertIsNone(perfil.id)
@@ -254,6 +292,14 @@ class TestSerializacao(unittest.TestCase):
         )
         self.assertEqual(Prospeccao.from_dict(prospeccao.to_dict()), prospeccao)
 
+    def test_prospeccao_tem_status_concluida_por_padrao(self):
+        self.assertEqual(Prospeccao(perfil_id=1).status, StatusProspeccao.CONCLUIDA)
+        self.assertEqual(Prospeccao(perfil_id=1).to_dict()["status"], "concluida")
+
+    def test_prospeccao_ida_e_volta_com_status_erro(self):
+        prospeccao = Prospeccao(perfil_id=2, status=StatusProspeccao.ERRO, id=3)
+        self.assertEqual(Prospeccao.from_dict(prospeccao.to_dict()), prospeccao)
+
     def test_prospeccao_from_dict_invalida(self):
         base = Prospeccao(perfil_id=1).to_dict()
         casos = {
@@ -262,6 +308,7 @@ class TestSerializacao(unittest.TestCase):
             "perfil_id texto": {**base, "perfil_id": "1"},
             "total negativo": {**base, "total_empresas_avaliadas": -1},
             "id texto": {**base, "id": "1"},
+            "status invalido": {**base, "status": "pendente"},
             "data invalida": {**base, "criada_em": "ontem"},
             "data nao e texto": {**base, "criada_em": 20261117},
             "leads nao e lista": {**base, "leads": {}},

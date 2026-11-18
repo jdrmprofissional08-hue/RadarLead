@@ -1,8 +1,8 @@
 """Testes de contrato do Repositorio.
 
 As mesmas verificações rodam contra cada implementação (memória e JSON).
-Quando o repositório PostgreSQL existir, basta criar mais um trio de
-classes no fim do arquivo com o seu criar_repositorio().
+O repositório PostgreSQL entra aqui também, mas só roda se houver um banco
+de teste (ver tests/apoio_postgres.py); sem ele, essas classes são puladas.
 """
 
 import tempfile
@@ -18,6 +18,7 @@ from src.excecoes import (
     PerfilNaoEncontradoError,
     ProspeccaoNaoEncontradaError,
 )
+from tests import apoio_postgres
 from src.persistencia.repositorio_json import RepositorioJson
 from src.persistencia.repositorio_memoria import RepositorioMemoria
 
@@ -38,6 +39,7 @@ def nova_empresa(cnpj="11111111000111", razao_social="Empresa A"):
         cnae_principal="6204000",
         porte=3,
         municipio_ibge="5208707",
+        cep="75700000",  # o PostgreSQL obtém o município pelo CEP
     )
 
 
@@ -216,6 +218,34 @@ class TestEmpresasJson(UsaJson, ContratoEmpresas, unittest.TestCase):
 
 class TestProspeccoesJson(UsaJson, ContratoProspeccoes, unittest.TestCase):
     pass
+
+
+
+
+class UsaPostgres:
+    def criar_repositorio(self):
+        return apoio_postgres.criar_repositorio_postgres()
+
+
+@apoio_postgres.requer_postgres
+class TestPerfisPostgres(UsaPostgres, ContratoPerfis, unittest.TestCase):
+    pass
+
+
+@apoio_postgres.requer_postgres
+class TestEmpresasPostgres(UsaPostgres, ContratoEmpresas, unittest.TestCase):
+    pass
+
+
+@apoio_postgres.requer_postgres
+class TestProspeccoesPostgres(UsaPostgres, ContratoProspeccoes, unittest.TestCase):
+
+    def setUp(self):
+        super().setUp()
+        # no banco, prospecção e lead exigem perfil e estabelecimento existentes
+        self.repo.salvar_perfil(novo_perfil("P1"))
+        self.repo.salvar_perfil(novo_perfil("P2"))
+        self.repo.salvar_empresa(nova_empresa())
 
 
 if __name__ == "__main__":
