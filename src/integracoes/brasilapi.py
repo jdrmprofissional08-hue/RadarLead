@@ -2,7 +2,8 @@
 import json
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
-
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 
 class ClienteBrasilAPI:
     """Cliente responsável por consultar dados na BrasilAPI."""
@@ -100,3 +101,53 @@ class ClienteBrasilAPI:
             raise ValueError("Resposta da BrasilAPI invalida")
 
         return dados
+
+    def consultar_cnpjs(self, cnpjs: list[str],
+                        max_workers: int = 4) -> list[dict]:
+        """Consulta varios CNPJs utilizando threads."""
+
+        if not isinstance(cnpjs, list):
+            raise ValueError("CNPJs devem ser uma lista")
+
+        if (isinstance(max_workers, bool)
+                or not isinstance(max_workers, int)
+                or max_workers < 1):
+            raise ValueError("Numero de threads invalido")
+
+        resultados = []
+        lock = Lock()
+
+        def consultar(indice, cnpj):
+            try:
+                dados = self.consultar_cnpj(cnpj)
+
+            except (ValueError, ConnectionError) as erro:
+                resultado = {
+                    "cnpj": cnpj,
+                    "sucesso": False,
+                    "erro": str(erro)
+                }
+
+            else:
+                resultado = {
+                    "cnpj": cnpj,
+                    "sucesso": True,
+                    "dados": dados
+                }
+
+            with lock:
+                resultados.append((indice, resultado))
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            tarefas = []
+
+            for indice, cnpj in enumerate(cnpjs):
+                tarefa = executor.submit(consultar, indice, cnpj)
+                tarefas.append(tarefa)
+
+            for tarefa in tarefas:
+                tarefa.result()
+
+        resultados.sort(key=lambda item: item[0])
+
+        return [resultado for _, resultado in resultados]

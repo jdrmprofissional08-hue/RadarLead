@@ -3,6 +3,7 @@ import json
 import unittest
 from io import BytesIO
 from unittest.mock import patch
+from threading import Barrier
 
 from src.integracoes.brasilapi import ClienteBrasilAPI
 
@@ -123,6 +124,82 @@ class TestClienteBrasilAPI(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 cliente.consultar_cnpj("19131243000197")
+
+
+    def test_consultas_paralelas(self):
+        cnpjs = [
+            "11111111000191",
+            "22222222000191",
+            "33333333000191"
+        ]
+
+        barreira = Barrier(3)
+
+        def consulta_simulada(cnpj):
+            barreira.wait(timeout=5)
+            return {
+                "cnpj": cnpj,
+                "razao_social": "Empresa Teste"
+            }
+
+        cliente = ClienteBrasilAPI()
+
+        with patch.object(
+            cliente,
+            "consultar_cnpj",
+            side_effect=consulta_simulada
+        ):
+            resultados = cliente.consultar_cnpjs(
+                cnpjs, max_workers=3
+            )
+
+        self.assertEqual(len(resultados), 3)
+        self.assertTrue(all(r["sucesso"] for r in resultados))
+        self.assertEqual(
+            [r["cnpj"] for r in resultados], cnpjs
+        )
+
+    def test_consultas_paralelas_com_falha(self):
+        cnpjs = [
+            "11111111000191",
+            "22222222000191",
+            "33333333000191"
+        ]
+
+        def consulta_simulada(cnpj):
+            if cnpj == "22222222000191":
+                raise ConnectionError("Falha simulada")
+            return {"cnpj": cnpj}
+
+        cliente = ClienteBrasilAPI()
+
+        with patch.object(
+            cliente,
+            "consultar_cnpj",
+            side_effect=consulta_simulada
+        ):
+            resultados = cliente.consultar_cnpjs(
+                cnpjs, max_workers=3
+            )
+
+        self.assertTrue(resultados[0]["sucesso"])
+        self.assertFalse(resultados[1]["sucesso"])
+        self.assertTrue(resultados[2]["sucesso"])
+        self.assertIn("Falha simulada", resultados[1]["erro"])
+
+    def test_lista_cnpjs_invalida(self):
+        cliente = ClienteBrasilAPI()
+
+        with self.assertRaises(ValueError):
+            cliente.consultar_cnpjs("nao e uma lista")
+
+    def test_numero_threads_invalido(self):
+        cliente = ClienteBrasilAPI()
+
+        with self.assertRaises(ValueError):
+            cliente.consultar_cnpjs(
+                ["11111111000191"], max_workers=0
+            )
 
 
 if __name__ == "__main__":
