@@ -63,7 +63,14 @@ class GerenciadorConexao:
             raise PersistenciaError(
                 f"Não foi possível conectar ao PostgreSQL: {self._resumo(erro)}"
             ) from erro
-
+        except UnicodeDecodeError as erro:
+            self._conexao = None
+            raise PersistenciaError(
+                "Não foi possível conectar ao PostgreSQL: o servidor recusou a "
+                "conexão (confira host, porta, banco, usuário e senha); a "
+                "mensagem dele veio em uma codificação que não é UTF-8"
+            ) from erro
+        
         return self
 
     def fechar(self) -> None:
