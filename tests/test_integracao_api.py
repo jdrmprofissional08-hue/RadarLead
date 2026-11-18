@@ -83,5 +83,43 @@ class TestIntegracaoAPI(unittest.TestCase):
         self.assertEqual(endereco["longitude"], -47.94)
 
 
+    def test_contrato_empresa_backend(self):
+        dados_api = {
+            "cnpj": "19131243000197",
+            "razao_social": "Empresa Exemplo LTDA",
+            "cnae_fiscal": 6204000,
+            "codigo_porte": 3,
+            "codigo_municipio_ibge": 5205109,
+            "cnaes_secundarios": [
+                {"codigo": 6201501}
+            ],
+            "cep": "75701000"
+        }
+
+        normalizador = Normalizador()
+        empresa = normalizador.normalizar_cnpj(dados_api)
+
+        campos_esperados = {
+            "cnpj",
+            "razao_social",
+            "cnae_principal",
+            "porte",
+            "municipio_ibge",
+            "cnaes_secundarios",
+            "cep",
+            "latitude",
+            "longitude"
+        }
+
+        self.assertEqual(set(empresa.keys()), campos_esperados)
+        self.assertIsInstance(empresa["cnpj"], str)
+        self.assertIsInstance(empresa["porte"], int)
+        self.assertIsInstance(empresa["cnae_principal"], str)
+        self.assertIsInstance(empresa["municipio_ibge"], str)
+        self.assertIsInstance(empresa["cnaes_secundarios"], list)
+        self.assertIsNone(empresa["latitude"])
+        self.assertIsNone(empresa["longitude"])
+
+
 if __name__ == "__main__":
     unittest.main()

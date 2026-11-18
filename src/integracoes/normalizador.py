@@ -1,3 +1,4 @@
+from math import isfinite
 
 class Normalizador:
     """Normaliza os dados recebidos da BrasilAPI."""
@@ -182,11 +183,14 @@ class Normalizador:
         except (ValueError, TypeError) as erro:
             raise ValueError("Coordenadas invalidas") from erro
 
-        if latitude is not None and not -90 <= latitude <= 90:
-            raise ValueError("Latitude fora do intervalo permitido")
+        
+        if latitude is not None:
+            if not isfinite(latitude) or not -90 <= latitude <= 90:
+                raise ValueError("Latitude invalida")
 
-        if longitude is not None and not -180 <= longitude <= 180:
-            raise ValueError("Longitude fora do intervalo permitido")
+        if longitude is not None:
+            if not isfinite(longitude) or not -180 <= longitude <= 180:
+                raise ValueError("Longitude invalida")
 
 
         return {

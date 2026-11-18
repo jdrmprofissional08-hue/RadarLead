@@ -177,6 +177,39 @@ class TestNormalizador(unittest.TestCase):
             self.normalizador.normalizar_cep(dados)
 
 
+    def test_latitude_nan(self):
+        dados = {
+            "cep": "75701000",
+            "city": "Catalao",
+            "state": "GO",
+            "location": {
+                "coordinates": {
+                    "latitude": "nan",
+                    "longitude": -47.94
+                }
+            }
+        }
+
+        with self.assertRaises(ValueError):
+            self.normalizador.normalizar_cep(dados)
+
+    def test_longitude_infinita(self):
+        dados = {
+            "cep": "75701000",
+            "city": "Catalao",
+            "state": "GO",
+            "location": {
+                "coordinates": {
+                    "latitude": -18.16,
+                    "longitude": "inf"
+                }
+            }
+        }
+
+        with self.assertRaises(ValueError):
+            self.normalizador.normalizar_cep(dados)
+
+
 if __name__ == "__main__":
     unittest.main()
  
