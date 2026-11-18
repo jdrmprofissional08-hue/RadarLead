@@ -61,5 +61,27 @@ class TestNormalizador(unittest.TestCase):
             self.normalizador.normalizar_cnpj(self.dados)
 
 
+    def test_cnaes_secundarios(self):
+        cnaes = [
+            {"codigo": 6201501},
+            {"codigo": "6311900"},
+            {"codigo": 6201501}
+        ]
+
+        resultado = self.normalizador.normalizar_cnaes_secundarios(cnaes)
+        self.assertEqual(resultado, ["6201501", "6311900"])
+
+    def test_cnaes_secundarios_ausentes(self):
+        resultado = self.normalizador.normalizar_cnaes_secundarios(None)
+        self.assertEqual(resultado, [])
+
+    def test_cnaes_secundarios_invalidos(self):
+        with self.assertRaises(ValueError):
+            self.normalizador.normalizar_cnaes_secundarios(
+                [{"codigo": "abc"}]
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
+ 

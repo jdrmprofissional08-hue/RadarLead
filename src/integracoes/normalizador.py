@@ -75,10 +75,48 @@ class Normalizador:
             "cnae_principal": cnae,
             "porte": porte,
             "municipio_ibge": municipio,
-            "cnaes_secundarios": [],
+            "cnaes_secundarios": self.normalizar_cnaes_secundarios(
+    dados.get("cnaes_secundarios")
+),
             "cep": cep,
             "latitude": None,
             "longitude": None
         }
 
         return empresa
+
+    
+    def normalizar_cnaes_secundarios(self, cnaes: list | None) -> list[str]:
+        """Normaliza os CNAEs secundários recebidos da BrasilAPI."""
+
+        if cnaes is None:
+            return []
+
+        if not isinstance(cnaes, list):
+            raise ValueError("CNAEs secundarios devem ser uma lista")
+
+        resultado = []
+
+        for item in cnaes:
+            if isinstance(item, dict):
+                codigo = item.get("codigo")
+            else:
+                codigo = item
+
+            if codigo is None or isinstance(codigo, bool):
+                raise ValueError("CNAE secundario invalido")
+
+            if not isinstance(codigo, (str, int)):
+                raise ValueError("CNAE secundario invalido")
+
+            codigo = str(codigo).strip()
+            codigo = codigo.replace(".", "").replace("-", "").replace("/", "")
+
+            if len(codigo) != 7 or not codigo.isdigit():
+                raise ValueError("CNAE secundario invalido")
+
+            if codigo not in resultado:
+                resultado.append(codigo)
+
+        return resultado
+
