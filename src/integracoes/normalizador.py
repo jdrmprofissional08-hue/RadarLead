@@ -120,3 +120,81 @@ class Normalizador:
 
         return resultado
 
+    def normalizar_cep(self, dados: dict) -> dict:
+        """Normaliza os dados de endereço recebidos da BrasilAPI."""
+
+        if not isinstance(dados, dict):
+            raise ValueError("Dados de CEP devem ser um dicionario")
+
+        cep = dados.get("cep")
+
+        if not isinstance(cep, str):
+            raise ValueError("CEP invalido")
+
+        cep = cep.strip().replace("-", "").replace(".", "")
+
+        if len(cep) != 8 or not cep.isdigit():
+            raise ValueError("CEP deve conter 8 digitos")
+
+        municipio = dados.get("city")
+        uf = dados.get("state")
+
+        if not isinstance(municipio, str) or not municipio.strip():
+            raise ValueError("Municipio ausente ou invalido")
+
+        if not isinstance(uf, str) or len(uf.strip()) != 2:
+            raise ValueError("UF ausente ou invalida")
+
+        ibge = dados.get("ibge")
+        if isinstance(ibge, dict):
+            ibge = ibge.get("city")
+
+        if ibge is not None:
+            ibge = str(ibge).strip()
+            if len(ibge) != 7 or not ibge.isdigit():
+                raise ValueError("Codigo IBGE invalido")
+
+        
+        localizacao = dados.get("location") or {}
+
+        if not isinstance(localizacao, dict):
+            raise ValueError("Localizacao invalida")
+
+        coordenadas = localizacao.get("coordinates") or {}
+
+        if not isinstance(coordenadas, dict):
+            raise ValueError("Coordenadas invalidas")
+
+        latitude = coordenadas.get("latitude")
+        longitude = coordenadas.get("longitude")
+
+        try:
+            if latitude is not None:
+                if isinstance(latitude, bool):
+                    raise ValueError("Latitude invalida")
+                latitude = float(latitude)
+
+            if longitude is not None:
+                if isinstance(longitude, bool):
+                    raise ValueError("Longitude invalida")
+                longitude = float(longitude)
+
+        except (ValueError, TypeError) as erro:
+            raise ValueError("Coordenadas invalidas") from erro
+
+        if latitude is not None and not -90 <= latitude <= 90:
+            raise ValueError("Latitude fora do intervalo permitido")
+
+        if longitude is not None and not -180 <= longitude <= 180:
+            raise ValueError("Longitude fora do intervalo permitido")
+
+
+        return {
+            "cep": cep,
+            "municipio": municipio.strip(),
+            "uf": uf.strip().upper(),
+            "municipio_ibge": ibge,
+            "latitude": latitude,
+            "longitude": longitude
+        }
+

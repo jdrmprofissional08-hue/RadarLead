@@ -81,6 +81,101 @@ class TestNormalizador(unittest.TestCase):
                 [{"codigo": "abc"}]
             )
 
+    def test_cep_valido(self):
+        dados = {
+            "cep": "75701-000",
+            "city": "Catalao",
+            "state": "GO",
+            "ibge": {"city": "5205109"}
+        }
+
+        resultado = self.normalizador.normalizar_cep(dados)
+
+        self.assertEqual(resultado["cep"], "75701000")
+        self.assertEqual(resultado["municipio"], "Catalao")
+        self.assertEqual(resultado["uf"], "GO")
+        self.assertEqual(resultado["municipio_ibge"], "5205109")
+
+    def test_cep_com_coordenadas(self):
+        dados = {
+            "cep": "75701000",
+            "city": "Catalao",
+            "state": "GO",
+            "location": {
+                "coordinates": {
+                    "latitude": -18.16,
+                    "longitude": -47.94
+                }
+            }
+        }
+
+        resultado = self.normalizador.normalizar_cep(dados)
+
+        self.assertEqual(resultado["latitude"], -18.16)
+        self.assertEqual(resultado["longitude"], -47.94)
+
+    def test_cep_sem_coordenadas(self):
+        dados = {
+            "cep": "75701000",
+            "city": "Catalao",
+            "state": "GO"
+        }
+
+        resultado = self.normalizador.normalizar_cep(dados)
+
+        self.assertIsNone(resultado["latitude"])
+        self.assertIsNone(resultado["longitude"])
+
+    def test_cep_invalido(self):
+        dados = {
+            "cep": "123",
+            "city": "Catalao",
+            "state": "GO"
+        }
+
+        with self.assertRaises(ValueError):
+            self.normalizador.normalizar_cep(dados)
+
+    def test_cep_sem_municipio(self):
+        dados = {
+            "cep": "75701000",
+            "city": None,
+            "state": "GO"
+        }
+
+        with self.assertRaises(ValueError):
+            self.normalizador.normalizar_cep(dados)
+
+
+    def test_cep_latitude_invalida(self):
+        dados = {
+            "cep": "75701000",
+            "city": "Catalao",
+            "state": "GO",
+            "location": {
+                "coordinates": {
+                    "latitude": 200,
+                    "longitude": -47.94
+                }
+            }
+        }
+
+        with self.assertRaises(ValueError):
+            self.normalizador.normalizar_cep(dados)
+
+    def test_cep_coordenadas_invalidas(self):
+        dados = {
+            "cep": "75701000",
+            "city": "Catalao",
+            "state": "GO",
+            "location": {
+                "coordinates": "invalido"
+            }
+        }
+
+        with self.assertRaises(ValueError):
+            self.normalizador.normalizar_cep(dados)
+
 
 if __name__ == "__main__":
     unittest.main()
