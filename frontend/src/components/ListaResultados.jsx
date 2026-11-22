@@ -6,7 +6,7 @@ function pontuacaoParaOrdenar({ pontuacao }) {
 
 export default function ListaResultados({ resultados }) {
   if (resultados.length === 0) {
-    return <p className="mt-8 text-slate-300">Nenhuma empresa encontrada</p>
+    return <p className="mt-4 rounded-xl border border-divisor bg-superficie px-5 py-8 text-center text-suave">Nenhuma empresa encontrada</p>
   }
 
   const ordenados = [...resultados].sort(
@@ -14,7 +14,7 @@ export default function ListaResultados({ resultados }) {
   )
 
   return (
-    <ol className="mt-8 space-y-4">
+    <ol className="mt-4 space-y-3">
       {ordenados.map((empresa) => (
         <li key={empresa.cnpj || empresa.id}>
           <ResultadoEmpresa empresa={empresa} />

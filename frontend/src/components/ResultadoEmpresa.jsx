@@ -14,40 +14,40 @@ export default function ResultadoEmpresa({ empresa }) {
     : indisponivel
 
   return (
-    <article className="rounded-lg border border-slate-800 bg-slate-900 p-5 sm:p-6">
-      <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <h2 className="min-w-0 text-xl font-semibold wrap-break-word">
+    <article className="rounded-xl border border-divisor bg-superficie p-4 shadow-xs sm:p-5">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1.5">
+        <h2 className="min-w-0 text-xl font-semibold wrap-break-word text-marinho">
           {empresa.razao_social || 'Empresa sem nome informado'}
         </h2>
-        <p className="max-w-full text-sm font-semibold wrap-break-word text-emerald-300">
+        <p className="max-w-full rounded-md bg-acao-suave px-3 py-1.5 text-sm font-semibold wrap-break-word text-acao">
           Pontuação: {pontuacao}
         </p>
       </header>
 
-      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+      <dl className="mt-3 grid gap-2 rounded-lg bg-fundo px-3 py-2.5 text-sm sm:grid-cols-3">
         <div>
-          <dt className="text-slate-400">CNAE principal</dt>
+          <dt className="mb-0.5 font-medium text-suave">CNAE principal</dt>
           <dd>{cnae || indisponivel}</dd>
         </div>
         <div>
-          <dt className="text-slate-400">Porte</dt>
+          <dt className="mb-0.5 font-medium text-suave">Porte</dt>
           <dd>{rotulosPorte.get(empresa.porte) ?? indisponivel}</dd>
         </div>
         <div>
-          <dt className="text-slate-400">Município</dt>
+          <dt className="mb-0.5 font-medium text-suave">Município</dt>
           <dd>{municipio ? `${municipio.nome} (${municipio.uf})` : empresa.municipio_ibge || indisponivel}</dd>
         </div>
       </dl>
 
-      <h3 className="mt-5 text-sm font-semibold">Justificativas</h3>
+      <h3 className="mt-3 text-sm font-semibold">Justificativas</h3>
       {empresa.justificativas?.length > 0 ? (
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-300">
+        <ul className="mt-1 list-disc pl-5 text-sm leading-5 text-suave">
           {empresa.justificativas.map((justificativa, indice) => (
             <li key={indice}>{justificativa}</li>
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-sm text-slate-300">Nenhuma justificativa informada</p>
+        <p className="mt-1 text-sm text-suave">Nenhuma justificativa informada</p>
       )}
     </article>
   )

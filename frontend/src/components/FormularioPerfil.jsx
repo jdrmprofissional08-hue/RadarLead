@@ -8,13 +8,13 @@ import {
   validarPerfil,
 } from '../utils/perfilProspeccao.js'
 
-const estiloCampo = 'w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 aria-invalid:border-rose-400'
-const estiloBotao = 'rounded-md px-3 py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400'
+const estiloCampo = 'w-full min-w-0 rounded-lg border border-controle bg-superficie px-3 py-2.5 text-texto aria-invalid:border-erro'
+const estiloBotao = 'rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors'
 const formatoTotal = new Intl.NumberFormat('pt-BR', { maximumSignificantDigits: 15 })
 
 function ErroCampo({ campo, mensagem }) {
   return mensagem && (
-    <p id={`${campo}-erro`} className="mt-1 text-sm text-rose-300">
+    <p id={`${campo}-erro`} className="mt-2 text-sm font-medium text-erro">
       {mensagem}
     </p>
   )
@@ -84,9 +84,9 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
   }
 
   return (
-    <form noValidate onSubmit={enviar} className="mt-8 max-w-3xl space-y-6">
+    <form noValidate onSubmit={enviar} className="mt-6 space-y-7 rounded-2xl border border-divisor bg-superficie p-5 shadow-xs sm:p-8">
       <div>
-        <label htmlFor="nome" className="mb-2 block font-semibold">Nome do perfil</label>
+        <label htmlFor="nome" className="mb-2 block text-sm font-semibold">Nome do perfil</label>
         <input
           {...atributosCampo('nome')}
           name="nome"
@@ -102,8 +102,8 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
       </div>
 
       <fieldset className="min-w-0 space-y-3">
-        <legend className="mb-2 font-semibold">CNAEs desejados</legend>
-        <label htmlFor="cnae" className="block text-sm">Código CNAE</label>
+        <legend className="mb-2 font-semibold text-marinho">CNAEs desejados</legend>
+        <label htmlFor="cnae" className="block text-sm font-medium">Código CNAE</label>
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
             {...atributosCampo('cnae', 'cnae-ajuda')}
@@ -121,11 +121,11 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
             }}
             className={estiloCampo}
           />
-          <button type="button" onClick={adicionarCnae} className={`${estiloBotao} bg-slate-800 text-emerald-300 hover:bg-slate-700 sm:shrink-0`}>
+          <button type="button" onClick={adicionarCnae} className={`${estiloBotao} border border-acao bg-acao-suave text-acao hover:bg-turquesa/20 sm:shrink-0`}>
             Adicionar CNAE
           </button>
         </div>
-        <p id="cnae-ajuda" className="text-sm text-slate-400">
+        <p id="cnae-ajuda" className="text-sm text-suave">
           Informe pelo menos um código. Exemplo: 6204000 ou 6204-0/00.
         </p>
         <div aria-live="polite">
@@ -137,7 +137,7 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
                   <button
                     type="button"
                     onClick={() => removerCnae(codigo)}
-                    className={`${estiloBotao} bg-slate-800 text-sm hover:bg-slate-700`}
+                    className={`${estiloBotao} bg-fundo text-texto hover:bg-acao-suave hover:text-acao`}
                   >
                     Remover CNAE {codigo}
                   </button>
@@ -148,9 +148,9 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
         </div>
       </fieldset>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-5 border-y border-divisor py-6 sm:grid-cols-2">
         <div>
-          <label htmlFor="porte" className="mb-2 block font-semibold">Porte empresarial</label>
+          <label htmlFor="porte" className="mb-2 block text-sm font-semibold">Porte empresarial</label>
           <select
             {...atributosCampo('porte')}
             name="porte"
@@ -171,7 +171,7 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
         </div>
 
         <div>
-          <label htmlFor="municipio" className="mb-2 block font-semibold">Município-alvo</label>
+          <label htmlFor="municipio" className="mb-2 block text-sm font-semibold">Município-alvo</label>
           <select
             {...atributosCampo('municipio', 'municipio-ajuda')}
             name="municipio"
@@ -188,17 +188,17 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
               <option key={codigo} value={codigo}>{nome} ({uf}) · {codigo}</option>
             ))}
           </select>
-          <p id="municipio-ajuda" className="mt-1 text-sm text-slate-400">Lista provisória com códigos oficiais do IBGE.</p>
+          <p id="municipio-ajuda" className="mt-1 text-sm text-suave">Lista provisória com códigos oficiais do IBGE.</p>
           <ErroCampo campo="municipio" mensagem={erros.municipio} />
         </div>
       </div>
 
       <fieldset className="min-w-0 space-y-3">
-        <legend className="mb-2 font-semibold">Pesos dos critérios</legend>
+        <legend className="mb-2 font-semibold text-marinho">Pesos dos critérios</legend>
         <div className="grid gap-4 sm:grid-cols-3">
           {criterios.map(({ chave, rotulo }) => (
             <div key={chave}>
-              <label htmlFor={chave} className="mb-2 block text-sm">{rotulo}</label>
+              <label htmlFor={chave} className="mb-2 block text-sm font-medium">{rotulo}</label>
               <input
                 {...atributosCampo(chave, erros.totalPesos && 'totalPesos-erro')}
                 name={chave}
@@ -218,7 +218,7 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
             </div>
           ))}
         </div>
-        <output htmlFor={criterios.map(({ chave }) => chave).join(' ')} className="block text-sm text-slate-300">
+        <output htmlFor={criterios.map(({ chave }) => chave).join(' ')} className="block rounded-lg bg-fundo px-4 py-2.5 text-sm font-semibold text-texto">
           Total dos pesos: {total === null ? 'indisponível' : formatoTotal.format(total)}
         </output>
         <ErroCampo campo="totalPesos" mensagem={erros.totalPesos} />
@@ -227,7 +227,7 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
       <button
         type="submit"
         disabled={buscando}
-        className={`${estiloBotao} bg-emerald-400 text-slate-950 hover:bg-emerald-300 disabled:cursor-wait disabled:opacity-60`}
+        className={`${estiloBotao} min-h-11 w-full bg-turquesa text-marinho hover:bg-turquesa/80 disabled:cursor-wait disabled:bg-acao-suave disabled:text-acao sm:w-auto`}
       >
         Buscar empresas
       </button>

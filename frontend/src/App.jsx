@@ -6,7 +6,7 @@ import Resultados from './pages/Resultados.jsx'
 
 export default function App() {
   return (
-    <div className="flex min-h-dvh flex-col bg-slate-950 text-slate-50">
+    <div className="flex min-h-dvh flex-col bg-fundo text-texto">
       <MenuPrincipal />
       <Routes>
         <Route path="/" element={<Inicio />} />
