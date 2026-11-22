@@ -1,5 +1,8 @@
-// Recorte provisório: códigos de porte observados nos exemplos do classificador.
-export const portesProvisorios = [3, 5]
+export const portesPerfil = [
+  { codigo: 1, rotulo: 'Microempresa (ME)' },
+  { codigo: 3, rotulo: 'Empresa de Pequeno Porte (EPP)' },
+  { codigo: 5, rotulo: 'Demais empresas' },
+]
 
 // Recorte provisório de municípios com códigos da tabela oficial do IBGE.
 export const municipiosProvisorios = [
@@ -31,19 +34,21 @@ function converterPeso(entrada) {
   if (entrada.trim() === '') return null
 
   const valor = Number(entrada)
-  return Number.isFinite(valor) && valor >= 0 ? valor : null
+  return Number.isInteger(valor) && valor >= 0 && valor <= 100 ? valor : null
 }
 
 export function totalizarPesos(pesos) {
   const valores = criterios.map(({ chave }) => converterPeso(pesos[chave]))
   if (valores.includes(null)) return null
 
-  const total = valores.reduce((soma, valor) => soma + valor, 0)
-  return Number.isFinite(total) ? total : null
+  return valores.reduce((soma, valor) => soma + valor, 0)
 }
 
-export function validarPerfil({ cnaes, cnae, porte, municipio, pesos }) {
+export function validarPerfil({ nome, cnaes, cnae, porte, municipio, pesos }) {
   const erros = {}
+  const nomeNormalizado = nome.trim()
+  if (!nomeNormalizado) erros.nome = 'Informe o nome do perfil.'
+
   let cnaesDesejados = cnaes
 
   if (cnae.trim() !== '') {
@@ -55,7 +60,7 @@ export function validarPerfil({ cnaes, cnae, porte, municipio, pesos }) {
   }
 
   const codigoPorte = Number(porte)
-  if (!portesProvisorios.includes(codigoPorte)) {
+  if (!portesPerfil.some(({ codigo }) => codigo === codigoPorte)) {
     erros.porte = 'Selecione um porte empresarial.'
   }
   if (!municipiosProvisorios.some(({ codigo }) => codigo === municipio)) {
@@ -65,20 +70,24 @@ export function validarPerfil({ cnaes, cnae, porte, municipio, pesos }) {
   const pesosNumericos = {}
   for (const { chave } of criterios) {
     const valor = converterPeso(pesos[chave])
-    if (valor === null) erros[chave] = 'Informe um número maior ou igual a zero.'
+    if (valor === null) erros[chave] = 'Informe um número inteiro entre 0 e 100.'
     else pesosNumericos[chave] = valor
+  }
+
+  const total = totalizarPesos(pesos)
+  if (total !== null && total !== 100) {
+    erros.totalPesos = 'A soma dos pesos deve ser exatamente 100.'
   }
 
   if (Object.keys(erros).length > 0) return { erros }
 
   return {
     perfilValidado: {
-      perfil: {
-        cnaes_desejados: [...cnaesDesejados],
-        porte_desejado: codigoPorte,
-        municipio_alvo_ibge: municipio,
-      },
-      pesos: pesosNumericos,
+      nome: nomeNormalizado,
+      cnaes_desejados: [...cnaesDesejados],
+      porte_desejado: codigoPorte,
+      municipio_alvo_ibge: municipio,
+      ...pesosNumericos,
     },
   }
 }

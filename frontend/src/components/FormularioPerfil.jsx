@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   criterios,
   municipiosProvisorios,
-  portesProvisorios,
+  portesPerfil,
   prepararCnae,
   totalizarPesos,
   validarPerfil,
@@ -20,7 +20,8 @@ function ErroCampo({ campo, mensagem }) {
   )
 }
 
-export default function FormularioPerfil() {
+export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
+  const [nome, setNome] = useState('')
   const [cnae, setCnae] = useState('')
   const [cnaes, setCnaes] = useState([])
   const [porte, setPorte] = useState('')
@@ -29,7 +30,6 @@ export default function FormularioPerfil() {
     criterios.map(({ chave, inicial }) => [chave, inicial]),
   ))
   const [erros, setErros] = useState({})
-  const [perfilValidado, setPerfilValidado] = useState(null)
   const total = totalizarPesos(pesos)
 
   function atributosCampo(campo, ajuda) {
@@ -40,18 +40,22 @@ export default function FormularioPerfil() {
     }
   }
 
-  function limparValidacao(campo) {
-    setErros((anteriores) => ({ ...anteriores, [campo]: undefined }))
-    setPerfilValidado(null)
+  function limparValidacao(campo, erroRelacionado) {
+    setErros((anteriores) => ({
+      ...anteriores,
+      [campo]: undefined,
+      ...(erroRelacionado && { [erroRelacionado]: undefined }),
+    }))
+    onAlterar()
   }
 
   function adicionarCnae() {
-    limparValidacao('cnae')
     const { codigo, erro } = prepararCnae(cnae, cnaes)
     if (erro) {
       setErros((anteriores) => ({ ...anteriores, cnae: erro }))
       return
     }
+    limparValidacao('cnae')
     setCnaes([...cnaes, codigo])
     setCnae('')
   }
@@ -63,22 +67,40 @@ export default function FormularioPerfil() {
 
   function enviar(evento) {
     evento.preventDefault()
-    const resultado = validarPerfil({ cnaes, cnae, porte, municipio, pesos })
+    if (buscando) return
+    const resultado = validarPerfil({ nome, cnaes, cnae, porte, municipio, pesos })
     setErros(resultado.erros ?? {})
-    setPerfilValidado(resultado.perfilValidado ?? null)
 
     if (resultado.erros) {
       const primeiroCampo = Object.keys(resultado.erros)[0]
-      evento.currentTarget.elements.namedItem(primeiroCampo)?.focus()
+      const campoFoco = primeiroCampo === 'totalPesos' ? 'peso_cnae' : primeiroCampo
+      evento.currentTarget.elements.namedItem(campoFoco)?.focus()
       return
     }
 
-    setCnaes(resultado.perfilValidado.perfil.cnaes_desejados)
+    setCnaes(resultado.perfilValidado.cnaes_desejados)
     setCnae('')
+    onBuscar(resultado.perfilValidado)
   }
 
   return (
     <form noValidate onSubmit={enviar} className="mt-8 max-w-3xl space-y-6">
+      <div>
+        <label htmlFor="nome" className="mb-2 block font-semibold">Nome do perfil</label>
+        <input
+          {...atributosCampo('nome')}
+          name="nome"
+          required
+          value={nome}
+          onChange={(evento) => {
+            setNome(evento.target.value)
+            limparValidacao('nome')
+          }}
+          className={estiloCampo}
+        />
+        <ErroCampo campo="nome" mensagem={erros.nome} />
+      </div>
+
       <fieldset className="min-w-0 space-y-3">
         <legend className="mb-2 font-semibold">CNAEs desejados</legend>
         <label htmlFor="cnae" className="block text-sm">Código CNAE</label>
@@ -130,7 +152,7 @@ export default function FormularioPerfil() {
         <div>
           <label htmlFor="porte" className="mb-2 block font-semibold">Porte empresarial</label>
           <select
-            {...atributosCampo('porte', 'porte-ajuda')}
+            {...atributosCampo('porte')}
             name="porte"
             required
             value={porte}
@@ -141,11 +163,10 @@ export default function FormularioPerfil() {
             className={estiloCampo}
           >
             <option value="">Selecione o porte</option>
-            {portesProvisorios.map((codigo) => (
-              <option key={codigo} value={codigo}>Código {codigo} (provisório)</option>
+            {portesPerfil.map(({ codigo, rotulo }) => (
+              <option key={codigo} value={codigo}>{rotulo}</option>
             ))}
           </select>
-          <p id="porte-ajuda" className="mt-1 text-sm text-slate-400">Opções provisórias do classificador.</p>
           <ErroCampo campo="porte" mensagem={erros.porte} />
         </div>
 
@@ -179,16 +200,17 @@ export default function FormularioPerfil() {
             <div key={chave}>
               <label htmlFor={chave} className="mb-2 block text-sm">{rotulo}</label>
               <input
-                {...atributosCampo(chave)}
+                {...atributosCampo(chave, erros.totalPesos && 'totalPesos-erro')}
                 name={chave}
                 type="number"
                 min="0"
-                step="any"
+                max="100"
+                step="1"
                 required
                 value={pesos[chave]}
                 onChange={(evento) => {
                   setPesos({ ...pesos, [chave]: evento.target.value })
-                  limparValidacao(chave)
+                  limparValidacao(chave, 'totalPesos')
                 }}
                 className={estiloCampo}
               />
@@ -199,14 +221,16 @@ export default function FormularioPerfil() {
         <output htmlFor={criterios.map(({ chave }) => chave).join(' ')} className="block text-sm text-slate-300">
           Total dos pesos: {total === null ? 'indisponível' : formatoTotal.format(total)}
         </output>
+        <ErroCampo campo="totalPesos" mensagem={erros.totalPesos} />
       </fieldset>
 
-      <button type="submit" className={`${estiloBotao} bg-emerald-400 text-slate-950 hover:bg-emerald-300`}>
-        Validar perfil
+      <button
+        type="submit"
+        disabled={buscando}
+        className={`${estiloBotao} bg-emerald-400 text-slate-950 hover:bg-emerald-300 disabled:cursor-wait disabled:opacity-60`}
+      >
+        Buscar empresas
       </button>
-      <div role="status" className="text-sm text-emerald-300">
-        {perfilValidado && 'Perfil validado com sucesso.'}
-      </div>
     </form>
   )
 }

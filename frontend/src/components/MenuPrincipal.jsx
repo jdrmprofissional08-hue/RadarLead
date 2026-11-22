@@ -9,7 +9,6 @@ export default function MenuPrincipal() {
           {[
             { caminho: '/', rotulo: 'Início' },
             { caminho: '/perfil', rotulo: 'Perfil de Prospecção' },
-            { caminho: '/resultados', rotulo: 'Resultados' },
           ].map(({ caminho, rotulo }) => (
             <li key={caminho}>
               <NavLink
