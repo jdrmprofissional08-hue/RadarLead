@@ -63,7 +63,8 @@ it('invalida resultados quando uma atividade é removida', async () => {
     ['Nome do perfil', 'Exemplo'], ['Porte empresarial', '3'], ['Município-alvo', '5208707'],
     ['Pesquisar por atividade ou código CNAE', '6204000'],
   ]) fireEvent.change(screen.getByLabelText(rotulo), { target: { value } })
-  fireEvent.click(within(screen.getByRole('listbox')).getByRole('option'))
+  fireEvent.click(within(screen.getByRole('listbox', { name: 'Sugestões de CNAE' })).getByRole('option'))
+  fireEvent.click(screen.getByRole('option', { name: /Goiânia/ }))
   fireEvent.click(screen.getByRole('button', { name: 'Buscar empresas' }))
   expect(await screen.findByText('Empresa teste')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: /Remover CNAE 6204000/ }))

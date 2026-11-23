@@ -18,6 +18,7 @@ function preencherPerfil() {
   fireEvent.click(screen.getByRole('option', { name: /6204-0\/00/ }))
   preencher('Porte empresarial', '3')
   preencher('Município-alvo', '5208707')
+  fireEvent.click(screen.getByRole('option', { name: /Goiânia/ }))
 }
 
 function buscar() {
@@ -164,7 +165,7 @@ it('descarta a resposta HTTP antiga e apresenta os dados do lead atual', async (
     await act(async () => { anterior.resolve(resposta('Resultado HTTP antigo', '5208707')) })
     const cartao = screen.getByRole('article')
     expect(within(cartao).getByText('Resultado HTTP atual')).toBeInTheDocument()
-    expect(within(cartao).getByText('3304557')).toBeInTheDocument()
+    expect(within(cartao).getByText('Rio de Janeiro (RJ)')).toBeInTheDocument()
     expect(within(cartao).getByText('Empresa de pequeno porte')).toBeInTheDocument()
     expect(within(cartao).getByText('Novo')).toBeInTheDocument()
     expect(screen.queryByText('Resultado HTTP antigo')).not.toBeInTheDocument()

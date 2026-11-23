@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import PesquisaCnae from './PesquisaCnae.jsx'
+import PesquisaMunicipio from './PesquisaMunicipio.jsx'
 import {
   criterios,
-  municipiosProvisorios,
   portesPerfil,
   totalizarPesos,
   validarPerfil,
@@ -119,24 +119,15 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
         </div>
 
         <div>
-          <label htmlFor="municipio" className="mb-2 block text-sm font-semibold">Município-alvo</label>
-          <select
-            {...atributosCampo('municipio', 'municipio-ajuda')}
-            name="municipio"
-            required
-            value={municipio}
-            onChange={(evento) => {
-              setMunicipio(evento.target.value)
+          <PesquisaMunicipio
+            atributos={atributosCampo('municipio', 'municipio-ajuda')}
+            codigo={municipio}
+            estiloCampo={estiloCampo}
+            onAlterar={(codigo) => {
+              setMunicipio(codigo)
               limparValidacao('municipio')
             }}
-            className={estiloCampo}
-          >
-            <option value="">Selecione o município</option>
-            {municipiosProvisorios.map(({ nome, uf, codigo }) => (
-              <option key={codigo} value={codigo}>{nome} ({uf}) · {codigo}</option>
-            ))}
-          </select>
-          <p id="municipio-ajuda" className="mt-1 text-sm text-suave">Lista provisória com códigos oficiais do IBGE.</p>
+          />
           <ErroCampo campo="municipio" mensagem={erros.municipio} />
         </div>
       </div>

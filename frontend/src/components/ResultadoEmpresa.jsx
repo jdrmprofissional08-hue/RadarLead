@@ -1,4 +1,4 @@
-import { municipiosProvisorios } from '../utils/perfilProspeccao.js'
+import { municipiosPorCodigo } from '../utils/pesquisaMunicipio.js'
 
 const formatoPontos = new Intl.NumberFormat('pt-BR', { maximumSignificantDigits: 21 })
 const indisponivel = 'Não informado'
@@ -11,9 +11,7 @@ const rotulosStatus = new Map([
 ])
 
 export default function ResultadoEmpresa({ empresa }) {
-  const municipio = municipiosProvisorios.find(
-    ({ codigo }) => codigo === empresa.municipio_ibge,
-  )
+  const municipio = municipiosPorCodigo.get(empresa.municipio_ibge)
   const cnae = empresa.cnae_principal?.replace(/^(\d{4})(\d)(\d{2})$/, '$1-$2/$3')
   const pontuacao = Number.isFinite(empresa.pontuacao)
     ? `${formatoPontos.format(empresa.pontuacao)} ${empresa.pontuacao === 1 ? 'ponto' : 'pontos'}`

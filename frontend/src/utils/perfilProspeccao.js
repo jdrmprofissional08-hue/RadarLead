@@ -1,13 +1,9 @@
+import { municipiosPorCodigo } from './pesquisaMunicipio.js'
+
 export const portesPerfil = [
   { codigo: 1, rotulo: 'Microempresa (ME)' },
   { codigo: 3, rotulo: 'Empresa de Pequeno Porte (EPP)' },
   { codigo: 5, rotulo: 'Demais empresas' },
-]
-
-// Recorte provisório de municípios com códigos da tabela oficial do IBGE.
-export const municipiosProvisorios = [
-  { nome: 'Goiânia', uf: 'GO', codigo: '5208707' },
-  { nome: 'São Paulo', uf: 'SP', codigo: '3550308' },
 ]
 
 export const criterios = [
@@ -63,7 +59,7 @@ export function validarPerfil({ nome, cnaes, cnae = '', porte, municipio, pesos 
   if (!portesPerfil.some(({ codigo }) => codigo === codigoPorte)) {
     erros.porte = 'Selecione um porte empresarial.'
   }
-  if (!municipiosProvisorios.some(({ codigo }) => codigo === municipio)) {
+  if (!municipiosPorCodigo.has(municipio)) {
     erros.municipio = 'Selecione um município.'
   }
 
