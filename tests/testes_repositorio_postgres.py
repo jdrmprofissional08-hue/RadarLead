@@ -213,7 +213,7 @@ class TestEmpresasNoBanco(Base):
         lida = self.repo.buscar_empresa("11111111000111")
         self.assertEqual((lida.latitude, lida.longitude), (-16.68, -49.25))
 
-    def test_substitutos_provisorios_na_primeira_gravacao(self):
+    def test_sem_dados_cadastrais_grava_marcadores_e_nunca_ativa(self):
         self.repo.salvar_empresa(empresa())
 
         linha = executar(
@@ -221,11 +221,49 @@ class TestEmpresasNoBanco(Base):
                       emp.natureza_juridica_cod, emp.capital_social
                  FROM estabelecimento e JOIN empresa emp USING (cnpj_basico)"""
         )[0]
-        self.assertEqual(linha[0], "02")
+        self.assertEqual(linha[0], "00")          # não informada (NÃO é "02" ativa)
         self.assertEqual(linha[1], "00")
         self.assertEqual(str(linha[2]), "1900-01-01")
-        self.assertEqual(linha[3], "2062")
+        self.assertEqual(linha[3], "0000")
         self.assertEqual(int(linha[4]), 0)
+
+        lida = self.repo.buscar_empresa("11111111000111")
+        self.assertIsNone(lida.situacao_cadastral)
+        self.assertFalse(lida.ativa)
+        self.assertIsNone(lida.natureza_juridica)
+        self.assertIsNone(lida.data_inicio_atividade)
+
+    def test_dados_cadastrais_informados_sao_gravados_e_lidos(self):
+        self.repo.salvar_empresa(empresa(
+            situacao_cadastral=2, natureza_juridica="2062", capital_social=50000.5,
+            data_inicio_atividade="2015-03-10", data_situacao="2015-03-10",
+        ))
+
+        lida = self.repo.buscar_empresa("11111111000111")
+        self.assertEqual(lida.situacao_cadastral, 2)
+        self.assertTrue(lida.ativa)
+        self.assertEqual(lida.natureza_juridica, "2062")
+        self.assertEqual(lida.capital_social, 50000.5)
+        self.assertEqual(str(lida.data_inicio_atividade), "2015-03-10")
+        self.assertEqual(
+            executar("SELECT situacao_cod FROM estabelecimento")[0][0], "02"
+        )
+
+    def test_empresa_inativa_continua_inativa(self):
+        self.repo.salvar_empresa(empresa(situacao_cadastral=8))
+
+        lida = self.repo.buscar_empresa("11111111000111")
+        self.assertEqual(lida.situacao_cadastral, 8)
+        self.assertFalse(lida.ativa)
+
+    def test_dado_informado_atualiza_e_none_nao_apaga(self):
+        self.repo.salvar_empresa(empresa(situacao_cadastral=2, capital_social=10))
+        self.repo.salvar_empresa(empresa(situacao_cadastral=3))          # muda
+        self.repo.salvar_empresa(empresa())                              # None: mantém
+
+        lida = self.repo.buscar_empresa("11111111000111")
+        self.assertEqual(lida.situacao_cadastral, 3)
+        self.assertEqual(lida.capital_social, 10)
 
     def test_dados_reais_ja_carregados_nao_sao_sobrescritos(self):
         self.repo.salvar_empresa(empresa())
@@ -532,7 +570,7 @@ class TestRegrasDoEsquema(Base):
     def test_cnpj_e_email_da_empresa_usuaria_unicos(self):
         with self.assertRaises(psycopg2.errors.UniqueViolation):
             executar("INSERT INTO empresa_usuaria (nome, cnpj, email) "
-                     "VALUES ('Dup', '00000000000000', 'novo@b.com')")
+                     f"VALUES ('Dup', '{EMPRESA_USUARIA_PADRAO_CNPJ}', 'novo@b.com')")
         with self.assertRaises(psycopg2.errors.UniqueViolation):
             executar("INSERT INTO empresa_usuaria (nome, cnpj, email) "
                      "VALUES ('Dup', '12345678000199', 'padrao@radarlead.invalid')")

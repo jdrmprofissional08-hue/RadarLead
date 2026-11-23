@@ -320,5 +320,106 @@ class TestSerializacao(unittest.TestCase):
                     Prospeccao.from_dict(dados)
 
 
+class TestEmpresaDadosCadastrais(unittest.TestCase):
+
+    def test_sem_dados_cadastrais_nada_e_inventado(self):
+        empresa = empresa_valida()
+        self.assertIsNone(empresa.situacao_cadastral)
+        self.assertFalse(empresa.ativa)
+        self.assertIsNone(empresa.natureza_juridica)
+        self.assertIsNone(empresa.capital_social)
+
+    def test_normaliza_situacao_natureza_e_datas(self):
+        empresa = empresa_valida(
+            situacao_cadastral="02", natureza_juridica=2062, capital_social=10,
+            data_inicio_atividade="2015-03-10T00:00:00", data_situacao="2020-01-02",
+        )
+        self.assertEqual(empresa.situacao_cadastral, 2)
+        self.assertTrue(empresa.ativa)
+        self.assertEqual(empresa.natureza_juridica, "2062")
+        self.assertEqual(str(empresa.data_inicio_atividade), "2015-03-10")
+        self.assertEqual(str(empresa.data_situacao), "2020-01-02")
+
+    def test_so_situacao_2_e_ativa(self):
+        for codigo in (1, 3, 4, 8):
+            with self.subTest(codigo):
+                self.assertFalse(empresa_valida(situacao_cadastral=codigo).ativa)
+
+    def test_rejeita_dados_cadastrais_invalidos(self):
+        casos = {
+            "situacao zero (e o marcador do banco)": {"situacao_cadastral": 0},
+            "situacao texto": {"situacao_cadastral": "ativa"},
+            "situacao booleana": {"situacao_cadastral": True},
+            "situacao com 3 digitos": {"situacao_cadastral": 100},
+            "natureza zerada (e o marcador do banco)": {"natureza_juridica": "0000"},
+            "natureza longa": {"natureza_juridica": "20620"},
+            "capital negativo": {"capital_social": -1},
+            "capital texto": {"capital_social": "10"},
+            "capital NaN": {"capital_social": float("nan")},
+            "data invalida": {"data_inicio_atividade": "ontem"},
+            "data no formato brasileiro": {"data_situacao": "10/03/2015"},
+            "data marcador do banco": {"data_inicio_atividade": "1900-01-01"},
+            "data numero": {"data_inicio_atividade": 20150310},
+        }
+        for nome, alteracao in casos.items():
+            with self.subTest(nome):
+                with self.assertRaises(EmpresaInvalidaError):
+                    empresa_valida(**alteracao)
+
+    def test_ida_e_volta_com_dados_cadastrais(self):
+        empresa = empresa_valida(
+            situacao_cadastral=2, natureza_juridica="2062", capital_social=1500.5,
+            data_inicio_atividade="2015-03-10", data_situacao="2015-03-10",
+        )
+        dados = empresa.to_dict()
+
+        self.assertEqual(dados["situacao_cadastral"], 2)          # contrato do recomendador
+        self.assertEqual(dados["data_inicio_atividade"], "2015-03-10")
+        self.assertEqual(Empresa.from_dict(dados), empresa)
+
+    def test_from_dict_antigo_sem_os_campos_novos_continua_valido(self):
+        empresa = Empresa.from_dict({
+            "cnpj": "11111111000111", "razao_social": "A",
+            "cnae_principal": "5611201", "porte": 3, "municipio_ibge": "5208707",
+        })
+        self.assertIsNone(empresa.situacao_cadastral)
+
+
+class TestPesosDoPerfil(unittest.TestCase):
+
+    def test_peso_redondo_vira_inteiro(self):
+        """O recomendador exige inteiros; o banco devolve 50.0."""
+        perfil = perfil_valido(
+            peso_segmento=50.0, peso_porte=30.0, peso_localizacao=20.0
+        )
+        for peso in (perfil.peso_segmento, perfil.peso_porte,
+                     perfil.peso_localizacao):
+            self.assertIs(type(peso), int)
+        dados = perfil.to_dict()
+        self.assertIs(type(dados["peso_cnae"]), int)
+        self.assertIs(type(dados["peso_segmento"]), int)
+
+    def test_peso_decimal_continua_decimal(self):
+        perfil = perfil_valido(
+            peso_segmento=33.33, peso_porte=33.33, peso_localizacao=33.34
+        )
+        self.assertEqual(perfil.peso_segmento, 33.33)
+        self.assertIs(type(perfil.peso_localizacao), float)
+
+
+class TestPorteDoPerfil(unittest.TestCase):
+
+    def test_portes_da_receita_sao_aceitos(self):
+        for porte in (0, 1, 3, 5):
+            with self.subTest(porte):
+                self.assertEqual(perfil_valido(porte_desejado=porte).porte_desejado, porte)
+
+    def test_outros_portes_sao_recusados(self):
+        for porte in (2, 4, 6, -1, 99):
+            with self.subTest(porte):
+                with self.assertRaises(PerfilInvalidoError):
+                    perfil_valido(porte_desejado=porte)
+
+
 if __name__ == "__main__":
     unittest.main()

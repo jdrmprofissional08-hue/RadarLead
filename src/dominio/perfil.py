@@ -10,6 +10,15 @@ from src.dominio import validacao
 from src.excecoes import PerfilInvalidoError
 
 
+# códigos de porte da Receita Federal usados pelo esquema e pelo recomendador
+PORTES_VALIDOS = (0, 1, 3, 5)
+
+
+def _inteiro_se_redondo(valor):
+    """50.0 -> 50; 33.33 continua 33.33."""
+    return int(valor) if float(valor).is_integer() else valor
+
+
 @dataclass
 class Perfil:
     nome: str
@@ -38,11 +47,21 @@ class Perfil:
             self.porte_desejado = validacao.validar_inteiro(
                 self.porte_desejado, "Porte desejado"
             )
+            if self.porte_desejado not in PORTES_VALIDOS:
+                raise ValueError(
+                    "Porte desejado deve ser 0 (não informado), 1 (microempresa), "
+                    f"3 (pequeno porte) ou 5 (demais); recebido: {self.porte_desejado}"
+                )
             self.municipio_alvo_ibge = validacao.normalizar_ibge(
                 self.municipio_alvo_ibge
             )
             self._validar_pesos()
             self._validar_capital_minimo()
+            # 50.0 vira 50: o recomendador exige pesos inteiros, e o banco
+            # devolve NUMERIC como decimal.
+            self.peso_segmento = _inteiro_se_redondo(self.peso_segmento)
+            self.peso_porte = _inteiro_se_redondo(self.peso_porte)
+            self.peso_localizacao = _inteiro_se_redondo(self.peso_localizacao)
             if self.empresa_usuaria_id is not None:
                 self.empresa_usuaria_id = validacao.validar_inteiro(
                     self.empresa_usuaria_id, "Id da empresa usuária"

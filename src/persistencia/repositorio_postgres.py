@@ -14,14 +14,13 @@ precisam estar carregadas antes: o repositório NÃO inventa descrições. Se um
 código referenciado não existir, a gravação falha com PersistenciaError
 dizendo qual. Veja sql/seed_dominios.sql para o mínimo.
 
-SUBSTITUTOS PROVISÓRIOS (o domínio atual não tem estes dados, mas o esquema
-os exige). Valem só na PRIMEIRA gravação de um estabelecimento/empresa; se o
-registro já existir (por exemplo, vindo da carga real), eles não são
-sobrescritos:
-    - natureza jurídica, capital social, situação cadastral, motivo e datas
-      de situação/início de atividade  -> constantes PADRAO_* abaixo;
-    - empresa usuária do perfil quando não informada -> a "Empresa usuária
-      padrão" de sql/seed_dominios.sql (criada na hora se não existir).
+DADOS CADASTRAIS (situação, natureza jurídica, capital social, datas): se a
+Empresa os traz, são gravados; se vier None, o banco recebe um MARCADOR de
+"não informado" (ver marcadores.py), nunca um valor que pareça real, e um dado
+já existente no banco não é apagado por um None. Motivo da situação não faz
+parte do domínio e recebe o código '00' (SEM MOTIVO) na primeira gravação.
+Empresa usuária do perfil quando não informada -> a "Empresa usuária padrão" de
+sql/seed_dominios.sql (criada na hora se não existir).
 
 Diferenças em relação à memória/JSON, por limitação do esquema:
     - a ordem de cnaes_desejados e de cnaes_secundarios volta ordenada;
@@ -57,18 +56,22 @@ from src.excecoes import (
     ProspeccaoNaoEncontradaError,
 )
 from src.persistencia.conexao import GerenciadorConexao
+from src.persistencia.marcadores import (
+    CAPITAL_NAO_INFORMADO,
+    DATA_NAO_INFORMADA,
+    EMPRESA_USUARIA_PADRAO_CNPJ,
+    EMPRESA_USUARIA_PADRAO_EMAIL,
+    EMPRESA_USUARIA_PADRAO_NOME,
+    MOTIVO_PADRAO,
+    NATUREZA_NAO_INFORMADA,
+    SITUACAO_NAO_INFORMADA,
+    capital_do_banco,
+    codigo_para_situacao,
+    data_do_banco,
+    natureza_do_banco,
+    situacao_para_codigo,
+)
 from src.persistencia.repositorio import Repositorio
-
-# --- Substitutos provisórios (ver o cabeçalho) --------------------------------
-PADRAO_NATUREZA_JURIDICA = "2062"      # Sociedade Empresária Limitada
-PADRAO_CAPITAL_SOCIAL = 0
-PADRAO_SITUACAO = "02"                 # ATIVA
-PADRAO_MOTIVO = "00"                   # SEM MOTIVO
-PADRAO_DATA = date(1900, 1, 1)         # marcador de "data desconhecida"
-
-EMPRESA_USUARIA_PADRAO_NOME = "Empresa usuária padrão"
-EMPRESA_USUARIA_PADRAO_CNPJ = "00000000000000"
-EMPRESA_USUARIA_PADRAO_EMAIL = "padrao@radarlead.invalid"
 
 SEPARADOR_JUSTIFICATIVAS = "\n"
 
@@ -283,24 +286,38 @@ class RepositorioPostgres(Repositorio):
             """INSERT INTO empresa
                    (cnpj_basico, razao_social, natureza_juridica_cod,
                     capital_social, porte_cod)
-               VALUES (%s, %s, %s, %s, %s)
+               VALUES (%s, %s, COALESCE(%s, %s), COALESCE(%s, %s), %s)
                ON CONFLICT (cnpj_basico) DO UPDATE SET
                    razao_social = EXCLUDED.razao_social,
-                   porte_cod = EXCLUDED.porte_cod""",
-            (cnpj_basico, empresa.razao_social, PADRAO_NATUREZA_JURIDICA,
-             PADRAO_CAPITAL_SOCIAL, empresa.porte),
+                   porte_cod = EXCLUDED.porte_cod,
+                   natureza_juridica_cod = COALESCE(%s, empresa.natureza_juridica_cod),
+                   capital_social = COALESCE(%s, empresa.capital_social)""",
+            (cnpj_basico, empresa.razao_social,
+             empresa.natureza_juridica, NATUREZA_NAO_INFORMADA,
+             empresa.capital_social, CAPITAL_NAO_INFORMADO, empresa.porte,
+             empresa.natureza_juridica, empresa.capital_social),
         )
 
         cur.execute(
             """INSERT INTO estabelecimento
                    (cnpj, cnpj_basico, situacao_cod, data_situacao, motivo_cod,
                     data_inicio_atividade, cnae_principal, cep)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+               VALUES (%s, %s, COALESCE(%s, %s), COALESCE(%s, %s), %s,
+                       COALESCE(%s, %s), %s, %s)
                ON CONFLICT (cnpj) DO UPDATE SET
                    cnae_principal = EXCLUDED.cnae_principal,
-                   cep = EXCLUDED.cep""",
-            (empresa.cnpj, cnpj_basico, PADRAO_SITUACAO, PADRAO_DATA,
-             PADRAO_MOTIVO, PADRAO_DATA, empresa.cnae_principal, cep),
+                   cep = EXCLUDED.cep,
+                   situacao_cod = COALESCE(%s, estabelecimento.situacao_cod),
+                   data_situacao = COALESCE(%s, estabelecimento.data_situacao),
+                   data_inicio_atividade =
+                       COALESCE(%s, estabelecimento.data_inicio_atividade)""",
+            (empresa.cnpj, cnpj_basico,
+             situacao_para_codigo(empresa.situacao_cadastral), SITUACAO_NAO_INFORMADA,
+             empresa.data_situacao, DATA_NAO_INFORMADA, MOTIVO_PADRAO,
+             empresa.data_inicio_atividade, DATA_NAO_INFORMADA,
+             empresa.cnae_principal, cep,
+             situacao_para_codigo(empresa.situacao_cadastral),
+             empresa.data_situacao, empresa.data_inicio_atividade),
         )
 
         cur.execute(
@@ -317,7 +334,9 @@ class RepositorioPostgres(Repositorio):
     def _ler_empresas(cur, filtro: str, parametros: tuple) -> list[Empresa]:
         cur.execute(
             f"""SELECT e.cnpj, emp.razao_social, e.cnae_principal, emp.porte_cod,
-                       c.municipio_ibge, c.cep, c.latitude, c.longitude
+                       c.municipio_ibge, c.cep, c.latitude, c.longitude,
+                       e.situacao_cod, emp.natureza_juridica_cod,
+                       emp.capital_social, e.data_inicio_atividade, e.data_situacao
                   FROM estabelecimento e
                   JOIN empresa emp ON emp.cnpj_basico = e.cnpj_basico
                   LEFT JOIN cep c ON c.cep = e.cep
@@ -337,7 +356,8 @@ class RepositorioPostgres(Repositorio):
             secundarios.setdefault(cnpj, []).append(cnae)
 
         empresas = []
-        for cnpj, razao, cnae, porte, ibge, cep, lat, lon in linhas:
+        for (cnpj, razao, cnae, porte, ibge, cep, lat, lon,
+             situacao, natureza, capital, inicio, data_sit) in linhas:
             try:
                 empresas.append(Empresa(
                     cnpj=cnpj,
@@ -349,6 +369,11 @@ class RepositorioPostgres(Repositorio):
                     cep=cep,
                     latitude=lat,
                     longitude=lon,
+                    situacao_cadastral=codigo_para_situacao(situacao),
+                    natureza_juridica=natureza_do_banco(natureza),
+                    capital_social=capital_do_banco(capital),
+                    data_inicio_atividade=data_do_banco(inicio),
+                    data_situacao=data_do_banco(data_sit),
                 ))
             except DadosInvalidosError as erro:
                 raise PersistenciaError(

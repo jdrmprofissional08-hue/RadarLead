@@ -5,7 +5,9 @@ mensagem clara. As classes de domínio convertem esse ValueError na
 exceção específica do projeto (ver src/excecoes.py).
 """
 
+import math
 import re
+from datetime import date, datetime
 
 _SEPARADORES = re.compile(r"[.\-/\s]")
 
@@ -70,3 +72,72 @@ def validar_texto(valor, nome: str) -> str:
         raise ValueError(f"{nome} deve ser um texto não vazio, recebido: {valor!r}")
 
     return valor.strip()
+
+
+# --- Dados cadastrais opcionais da empresa --------------------------------------
+
+# Marcadores que o banco usa para "não informado" (ver persistencia/marcadores.py).
+# Por isso nenhum valor real pode coincidir com eles.
+_DATA_MARCADOR = date(1900, 1, 1)
+
+
+def normalizar_situacao(valor) -> int:
+    """Código da situação cadastral da Receita (1 nula, 2 ativa, 3 suspensa,
+    4 inapta, 8 baixada). Aceita 2, '2' ou '02'."""
+    if isinstance(valor, bool) or not isinstance(valor, (int, str)):
+        raise ValueError(
+            f"Situação cadastral deve ser um código numérico, recebido: {valor!r}"
+        )
+
+    texto = str(valor).strip()
+    if not texto.isdigit() or len(texto) > 2 or int(texto) == 0:
+        raise ValueError(
+            f"Situação cadastral deve ser um código de 1 a 99, recebido: {valor!r}"
+        )
+
+    return int(texto)
+
+
+def normalizar_natureza_juridica(valor) -> str:
+    """Código da natureza jurídica com 4 dígitos (aceita 2062 ou '2062')."""
+    texto = _para_digitos(valor, "Natureza jurídica")
+
+    if len(texto) > 4 or int(texto) == 0:
+        raise ValueError(
+            f"Natureza jurídica deve ter até 4 dígitos e não ser zero, recebido: {valor!r}"
+        )
+
+    return texto.zfill(4)
+
+
+def validar_capital(valor, nome: str = "Capital") -> float:
+    """Número finito e não negativo (bool e texto não passam)."""
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        raise ValueError(f"{nome} deve ser um número, recebido: {valor!r}")
+
+    if not math.isfinite(valor) or valor < 0:
+        raise ValueError(f"{nome} não pode ser negativo, recebido: {valor!r}")
+
+    return valor
+
+
+def validar_data(valor, nome: str) -> date:
+    """date, datetime ou texto 'AAAA-MM-DD' (a hora, se houver, é descartada)."""
+    if isinstance(valor, datetime):
+        resultado = valor.date()
+    elif isinstance(valor, date):
+        resultado = valor
+    elif isinstance(valor, str):
+        try:
+            resultado = date.fromisoformat(valor.strip()[:10])
+        except ValueError:
+            raise ValueError(
+                f"{nome} deve estar no formato AAAA-MM-DD, recebido: {valor!r}"
+            ) from None
+    else:
+        raise ValueError(f"{nome} deve ser uma data, recebido: {valor!r}")
+
+    if resultado <= _DATA_MARCADOR:
+        raise ValueError(f"{nome} inválida, recebido: {valor!r}")
+
+    return resultado
