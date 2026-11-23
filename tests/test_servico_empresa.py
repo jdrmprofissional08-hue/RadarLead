@@ -76,5 +76,32 @@ class TestServicoConsultaEmpresa(unittest.TestCase):
             self.servico.consultar_dados("19131243000197")
 
 
+    def test_conversao_para_objeto_empresa(self):
+        classe_simulada = Mock()
+        objeto_esperado = object()
+
+        classe_simulada.from_dict.return_value = objeto_esperado
+
+        resultado = self.servico.consultar_empresa(
+            "19131243000197",
+            classe_empresa=classe_simulada
+        )
+
+        self.assertIs(resultado, objeto_esperado)
+
+        classe_simulada.from_dict.assert_called_once()
+
+        dados_recebidos = (
+            classe_simulada.from_dict.call_args.args[0]
+        )
+
+        self.assertEqual(
+            dados_recebidos["situacao_cadastral"], 2
+        )
+        self.assertEqual(
+            dados_recebidos["latitude"], -18.16
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

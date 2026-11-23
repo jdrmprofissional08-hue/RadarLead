@@ -56,3 +56,14 @@ class ServicoConsultaEmpresa:
         empresa["longitude"] = endereco["longitude"]
 
         return empresa
+
+    def consultar_empresa(self, cnpj: str, classe_empresa=None):
+        """Consulta e converte os dados em um objeto Empresa."""
+
+        if classe_empresa is None:
+            from src.dominio.empresa import Empresa
+            classe_empresa = Empresa
+
+        dados = self.consultar_dados(cnpj)
+
+        return classe_empresa.from_dict(dados)
