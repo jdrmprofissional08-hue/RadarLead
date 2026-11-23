@@ -129,3 +129,40 @@ describe('Página de prospecção', () => {
     expect(screen.queryByText('Resultado anterior')).not.toBeInTheDocument()
   })
 })
+
+it('descarta a resposta HTTP antiga e apresenta os dados do lead atual', async () => {
+  const anterior = Promise.withResolvers()
+  const atual = Promise.withResolvers()
+  const fetchControlado = vi.fn().mockReturnValueOnce(anterior.promise).mockReturnValueOnce(atual.promise)
+  vi.stubEnv('VITE_RADARLEAD_MODO', 'http')
+  vi.stubGlobal('fetch', fetchControlado)
+
+  try {
+    render(<PerfilProspeccao />)
+    expect(screen.getByText(/Busca pela API do RadarLead/)).toBeInTheDocument()
+    preencherPerfil()
+    buscar()
+    preencher('Nome do perfil', 'Busca HTTP atual')
+    buscar()
+    expect(fetchControlado).toHaveBeenCalledTimes(2)
+
+    function resposta(razao_social, municipio_ibge) {
+      return new Response(JSON.stringify({ leads: [{
+        cnpj: '11111111000100', razao_social, municipio_ibge,
+        pontuacao: 0, justificativas: [], cnae_principal: '6204000',
+        porte: 3, porte_descricao: 'Empresa de pequeno porte', status: 'novo',
+      }] }), { status: 201 })
+    }
+    await act(async () => { atual.resolve(resposta('Resultado HTTP atual', '3304557')) })
+    await act(async () => { anterior.resolve(resposta('Resultado HTTP antigo', '5208707')) })
+    const cartao = screen.getByRole('article')
+    expect(within(cartao).getByText('Resultado HTTP atual')).toBeInTheDocument()
+    expect(within(cartao).getByText('3304557')).toBeInTheDocument()
+    expect(within(cartao).getByText('Empresa de pequeno porte')).toBeInTheDocument()
+    expect(within(cartao).getByText('Novo')).toBeInTheDocument()
+    expect(screen.queryByText('Resultado HTTP antigo')).not.toBeInTheDocument()
+  } finally {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+  }
+})

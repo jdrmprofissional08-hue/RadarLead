@@ -3,6 +3,12 @@ import { municipiosProvisorios } from '../utils/perfilProspeccao.js'
 const formatoPontos = new Intl.NumberFormat('pt-BR', { maximumSignificantDigits: 21 })
 const indisponivel = 'Não informado'
 const rotulosPorte = new Map([[1, 'ME'], [3, 'EPP'], [5, 'Demais']])
+const rotulosStatus = new Map([
+  ['novo', 'Novo'],
+  ['contatado', 'Contatado'],
+  ['convertido', 'Convertido'],
+  ['descartado', 'Descartado'],
+])
 
 export default function ResultadoEmpresa({ empresa }) {
   const municipio = municipiosProvisorios.find(
@@ -31,8 +37,14 @@ export default function ResultadoEmpresa({ empresa }) {
         </div>
         <div>
           <dt className="mb-0.5 font-medium text-suave">Porte</dt>
-          <dd>{rotulosPorte.get(empresa.porte) ?? indisponivel}</dd>
+          <dd>{empresa.porte_descricao || (rotulosPorte.get(empresa.porte) ?? indisponivel)}</dd>
         </div>
+        {empresa.status && (
+          <div>
+            <dt className="mb-0.5 font-medium text-suave">Status</dt>
+            <dd>{rotulosStatus.get(empresa.status) ?? empresa.status}</dd>
+          </div>
+        )}
         <div>
           <dt className="mb-0.5 font-medium text-suave">Município</dt>
           <dd>{municipio ? `${municipio.nome} (${municipio.uf})` : empresa.municipio_ibge || indisponivel}</dd>

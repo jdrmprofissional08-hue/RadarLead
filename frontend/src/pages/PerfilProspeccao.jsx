@@ -1,11 +1,13 @@
 import { useRef, useState } from 'react'
 import FormularioPerfil from '../components/FormularioPerfil.jsx'
 import ListaResultados from '../components/ListaResultados.jsx'
-import { buscarEmpresasSimuladas } from '../services/prospeccaoSimulada.js'
+import { obterServicoProspeccao } from '../services/prospeccao.js'
+import { ErroProspeccaoHttp } from '../services/prospeccaoHttp.js'
 
 export default function PerfilProspeccao() {
   const [busca, setBusca] = useState({ etapa: 'inicial' })
   const buscaAtual = useRef(0)
+  const { modo, buscarEmpresas } = obterServicoProspeccao()
 
   function invalidarBusca() {
     buscaAtual.current += 1
@@ -17,13 +19,18 @@ export default function PerfilProspeccao() {
     setBusca({ etapa: 'carregando' })
 
     try {
-      const resultados = await buscarEmpresasSimuladas(dados)
+      const resultados = await buscarEmpresas(dados)
       if (idBusca === buscaAtual.current) {
         setBusca({ etapa: 'concluida', resultados })
       }
-    } catch {
+    } catch (erro) {
       if (idBusca === buscaAtual.current) {
-        setBusca({ etapa: 'erro' })
+        const mensagem = modo === 'simulado'
+          ? 'Não foi possível concluir a busca simulada. Confira os critérios e tente novamente.'
+          : erro instanceof ErroProspeccaoHttp
+            ? erro.message
+            : 'Não foi possível concluir a busca pela API. Tente novamente.'
+        setBusca({ etapa: 'erro', mensagem })
       }
     }
   }
@@ -34,7 +41,9 @@ export default function PerfilProspeccao() {
         Perfil de Prospecção
       </h1>
       <p className="mt-3 text-sm text-suave">
-        Dados simulados. A busca usa uma base fictícia.
+        {modo === 'simulado' && 'Dados simulados. A busca usa uma base fictícia.'}
+        {modo === 'http' && 'Busca pela API do RadarLead. No modo demo do servidor, os dados são fictícios.'}
+        {modo !== 'simulado' && modo !== 'http' && 'Modo de busca inválido. Verifique a configuração.'}
       </p>
       <FormularioPerfil
         onBuscar={buscar}
@@ -56,7 +65,7 @@ export default function PerfilProspeccao() {
       </div>
       {busca.etapa === 'erro' && (
         <p role="alert" className="mt-4 rounded-lg border border-erro/25 bg-erro-suave px-4 py-3 text-sm font-medium text-erro">
-          Não foi possível concluir a busca simulada. Confira os critérios e tente novamente.
+          {busca.mensagem}
         </p>
       )}
       {busca.etapa === 'concluida' && (
