@@ -1,3 +1,20 @@
 __pycache__/
-*.pyc
+# Ambientes virtuais
 .venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# PyCharm
+.idea/
+
+# Arquivos de ambiente
+.env
+.env.*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
