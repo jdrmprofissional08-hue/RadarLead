@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --color-marinho: #11172f;
+  --color-turquesa: #00bfaf;
+  --color-fundo: #f1f4f7;
+  --color-superficie: #ffffff;
+  --color-texto: #26324a;
+  --color-suave: #526178;
+  --color-divisor: #dce3eb;
+  --color-controle: #8190a3;
+  --color-acao: #00675e;
+  --color-acao-suave: #e4f7f4;
+  --color-erro: #9f1239;
+  --color-erro-suave: #fff1f2;
+}
+
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-acao);
+    outline-offset: 3px;
+  }
+}
