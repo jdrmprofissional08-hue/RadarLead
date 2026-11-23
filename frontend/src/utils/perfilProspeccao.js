@@ -44,7 +44,7 @@ export function totalizarPesos(pesos) {
   return valores.reduce((soma, valor) => soma + valor, 0)
 }
 
-export function validarPerfil({ nome, cnaes, cnae, porte, municipio, pesos }) {
+export function validarPerfil({ nome, cnaes, cnae = '', porte, municipio, pesos }) {
   const erros = {}
   const nomeNormalizado = nome.trim()
   if (!nomeNormalizado) erros.nome = 'Informe o nome do perfil.'

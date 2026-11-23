@@ -1,9 +1,9 @@
 import { useState } from 'react'
+import PesquisaCnae from './PesquisaCnae.jsx'
 import {
   criterios,
   municipiosProvisorios,
   portesPerfil,
-  prepararCnae,
   totalizarPesos,
   validarPerfil,
 } from '../utils/perfilProspeccao.js'
@@ -22,7 +22,6 @@ function ErroCampo({ campo, mensagem }) {
 
 export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
   const [nome, setNome] = useState('')
-  const [cnae, setCnae] = useState('')
   const [cnaes, setCnaes] = useState([])
   const [porte, setPorte] = useState('')
   const [municipio, setMunicipio] = useState('')
@@ -49,26 +48,10 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
     onAlterar()
   }
 
-  function adicionarCnae() {
-    const { codigo, erro } = prepararCnae(cnae, cnaes)
-    if (erro) {
-      setErros((anteriores) => ({ ...anteriores, cnae: erro }))
-      return
-    }
-    limparValidacao('cnae')
-    setCnaes([...cnaes, codigo])
-    setCnae('')
-  }
-
-  function removerCnae(codigo) {
-    limparValidacao('cnae')
-    setCnaes(cnaes.filter((atual) => atual !== codigo))
-  }
-
   function enviar(evento) {
     evento.preventDefault()
     if (buscando) return
-    const resultado = validarPerfil({ nome, cnaes, cnae, porte, municipio, pesos })
+    const resultado = validarPerfil({ nome, cnaes, porte, municipio, pesos })
     setErros(resultado.erros ?? {})
 
     if (resultado.erros) {
@@ -78,8 +61,6 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
       return
     }
 
-    setCnaes(resultado.perfilValidado.cnaes_desejados)
-    setCnae('')
     onBuscar(resultado.perfilValidado)
   }
 
@@ -103,49 +84,16 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
 
       <fieldset className="min-w-0 space-y-3">
         <legend className="mb-2 font-semibold text-marinho">CNAEs desejados</legend>
-        <label htmlFor="cnae" className="block text-sm font-medium">Código CNAE</label>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            {...atributosCampo('cnae', 'cnae-ajuda')}
-            name="cnae"
-            value={cnae}
-            onChange={(evento) => {
-              setCnae(evento.target.value)
-              limparValidacao('cnae')
-            }}
-            onKeyDown={(evento) => {
-              if (evento.key === 'Enter' && !evento.nativeEvent.isComposing) {
-                evento.preventDefault()
-                adicionarCnae()
-              }
-            }}
-            className={estiloCampo}
-          />
-          <button type="button" onClick={adicionarCnae} className={`${estiloBotao} border border-acao bg-acao-suave text-acao hover:bg-turquesa/20 sm:shrink-0`}>
-            Adicionar CNAE
-          </button>
-        </div>
-        <p id="cnae-ajuda" className="text-sm text-suave">
-          Informe pelo menos um código. Exemplo: 6204000 ou 6204-0/00.
-        </p>
-        <div aria-live="polite">
-          <ErroCampo campo="cnae" mensagem={erros.cnae} />
-          {cnaes.length > 0 && (
-            <ul aria-label="CNAEs adicionados" className="flex flex-wrap gap-2">
-              {cnaes.map((codigo) => (
-                <li key={codigo}>
-                  <button
-                    type="button"
-                    onClick={() => removerCnae(codigo)}
-                    className={`${estiloBotao} bg-fundo text-texto hover:bg-acao-suave hover:text-acao`}
-                  >
-                    Remover CNAE {codigo}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <PesquisaCnae
+          atributos={atributosCampo('cnae', 'cnae-ajuda')}
+          estiloCampo={estiloCampo}
+          selecionados={cnaes}
+          onAlterar={(codigos) => {
+            setCnaes(codigos)
+            limparValidacao('cnae')
+          }}
+        />
+        <ErroCampo campo="cnae" mensagem={erros.cnae} />
       </fieldset>
 
       <div className="grid gap-5 border-y border-divisor py-6 sm:grid-cols-2">

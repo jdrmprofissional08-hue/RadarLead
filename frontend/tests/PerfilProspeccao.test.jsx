@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PerfilProspeccao from '../src/pages/PerfilProspeccao.jsx'
 import { buscarEmpresasSimuladas } from '../src/services/prospeccaoSimulada.js'
 
@@ -14,7 +14,8 @@ function preencher(rotulo, valor) {
 
 function preencherPerfil() {
   preencher('Nome do perfil', ' Meu perfil ')
-  preencher('Código CNAE', '6204-0/00')
+  preencher('Pesquisar por atividade ou código CNAE', '6204-0/00')
+  fireEvent.click(screen.getByRole('option', { name: /6204-0\/00/ }))
   preencher('Porte empresarial', '3')
   preencher('Município-alvo', '5208707')
 }
@@ -24,7 +25,12 @@ function buscar() {
 }
 
 describe('Página de prospecção', () => {
-  beforeEach(() => buscarEmpresasSimuladas.mockReset())
+  beforeEach(() => {
+    vi.stubEnv('VITE_RADARLEAD_MODO', 'simulado')
+    buscarEmpresasSimuladas.mockReset()
+  })
+
+  afterEach(() => vi.unstubAllEnvs())
 
   it('exibe erros obrigatórios, foca o primeiro campo e impede a busca', () => {
     render(<PerfilProspeccao />)
@@ -47,19 +53,19 @@ describe('Página de prospecção', () => {
     preencher('CNAE', '49')
     buscar()
     expect(screen.getByLabelText('CNAE')).toHaveAccessibleDescription('A soma dos pesos deve ser exatamente 100.')
-    expect(screen.getByLabelText('Código CNAE')).toHaveValue('6204-0/00')
+    expect(screen.getByRole('button', { name: /Remover CNAE 6204000/ })).toBeInTheDocument()
     expect(screen.getByLabelText('CNAE')).toHaveValue(49)
     expect(buscarEmpresasSimuladas).not.toHaveBeenCalled()
   })
 
   it('adiciona e remove CNAEs sem aceitar duplicatas normalizadas', () => {
     render(<PerfilProspeccao />)
-    const adicionar = screen.getByRole('button', { name: 'Adicionar CNAE' })
-    preencher('Código CNAE', '0123-4/56')
-    fireEvent.click(adicionar)
-    preencher('Código CNAE', '0123456')
-    fireEvent.click(adicionar)
-    expect(screen.getByText('Este CNAE já foi adicionado.')).toBeInTheDocument()
+    preencher('Pesquisar por atividade ou código CNAE', '0111-3/01')
+    fireEvent.click(screen.getByRole('option', { name: /Cultivo de arroz/ }))
+    preencher('Pesquisar por atividade ou código CNAE', '0111301')
+    const repetida = screen.getByRole('option', { name: /Cultivo de arroz/ })
+    expect(repetida).toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(repetida)
     const lista = screen.getByRole('list', { name: 'CNAEs adicionados' })
     const botoes = within(lista).getAllByRole('button')
     expect(botoes).toHaveLength(1)
@@ -135,6 +141,7 @@ it('descarta a resposta HTTP antiga e apresenta os dados do lead atual', async (
   const atual = Promise.withResolvers()
   const fetchControlado = vi.fn().mockReturnValueOnce(anterior.promise).mockReturnValueOnce(atual.promise)
   vi.stubEnv('VITE_RADARLEAD_MODO', 'http')
+  vi.stubEnv('VITE_RADARLEAD_API_URL', 'http://127.0.0.1:8000')
   vi.stubGlobal('fetch', fetchControlado)
 
   try {
