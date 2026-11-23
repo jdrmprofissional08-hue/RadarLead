@@ -213,7 +213,7 @@ class TestEmpresasNoBanco(Base):
         lida = self.repo.buscar_empresa("11111111000111")
         self.assertEqual((lida.latitude, lida.longitude), (-16.68, -49.25))
 
-    def test_substitutos_provisorios_na_primeira_gravacao(self):
+    def test_sem_dados_cadastrais_grava_marcadores_e_nunca_ativa(self):
         self.repo.salvar_empresa(empresa())
 
         linha = executar(
@@ -221,11 +221,49 @@ class TestEmpresasNoBanco(Base):
                       emp.natureza_juridica_cod, emp.capital_social
                  FROM estabelecimento e JOIN empresa emp USING (cnpj_basico)"""
         )[0]
-        self.assertEqual(linha[0], "02")
+        self.assertEqual(linha[0], "00")          # não informada (NÃO é "02" ativa)
         self.assertEqual(linha[1], "00")
         self.assertEqual(str(linha[2]), "1900-01-01")
-        self.assertEqual(linha[3], "2062")
+        self.assertEqual(linha[3], "0000")
         self.assertEqual(int(linha[4]), 0)
+
+        lida = self.repo.buscar_empresa("11111111000111")
+        self.assertIsNone(lida.situacao_cadastral)
+        self.assertFalse(lida.ativa)
+        self.assertIsNone(lida.natureza_juridica)
+        self.assertIsNone(lida.data_inicio_atividade)
+
+    def test_dados_cadastrais_informados_sao_gravados_e_lidos(self):
+        self.repo.salvar_empresa(empresa(
+            situacao_cadastral=2, natureza_juridica="2062", capital_social=50000.5,
+            data_inicio_atividade="2015-03-10", data_situacao="2015-03-10",
+        ))
+
+        lida = self.repo.buscar_empresa("11111111000111")
+        self.assertEqual(lida.situacao_cadastral, 2)
+        self.assertTrue(lida.ativa)
+        self.assertEqual(lida.natureza_juridica, "2062")
+        self.assertEqual(lida.capital_social, 50000.5)
+        self.assertEqual(str(lida.data_inicio_atividade), "2015-03-10")
+        self.assertEqual(
+            executar("SELECT situacao_cod FROM estabelecimento")[0][0], "02"
+        )
+
+    def test_empresa_inativa_continua_inativa(self):
+        self.repo.salvar_empresa(empresa(situacao_cadastral=8))
+
+        lida = self.repo.buscar_empresa("11111111000111")
+        self.assertEqual(lida.situacao_cadastral, 8)
+        self.assertFalse(lida.ativa)
+
+    def test_dado_informado_atualiza_e_none_nao_apaga(self):
+        self.repo.salvar_empresa(empresa(situacao_cadastral=2, capital_social=10))
+        self.repo.salvar_empresa(empresa(situacao_cadastral=3))          # muda
+        self.repo.salvar_empresa(empresa())                              # None: mantém
+
+        lida = self.repo.buscar_empresa("11111111000111")
+        self.assertEqual(lida.situacao_cadastral, 3)
+        self.assertEqual(lida.capital_social, 10)
 
     def test_dados_reais_ja_carregados_nao_sao_sobrescritos(self):
         self.repo.salvar_empresa(empresa())
@@ -532,7 +570,7 @@ class TestRegrasDoEsquema(Base):
     def test_cnpj_e_email_da_empresa_usuaria_unicos(self):
         with self.assertRaises(psycopg2.errors.UniqueViolation):
             executar("INSERT INTO empresa_usuaria (nome, cnpj, email) "
-                     "VALUES ('Dup', '00000000000000', 'novo@b.com')")
+                     f"VALUES ('Dup', '{EMPRESA_USUARIA_PADRAO_CNPJ}', 'novo@b.com')")
         with self.assertRaises(psycopg2.errors.UniqueViolation):
             executar("INSERT INTO empresa_usuaria (nome, cnpj, email) "
                      "VALUES ('Dup', '12345678000199', 'padrao@radarlead.invalid')")
@@ -612,51 +650,6 @@ class TestFluxoCompleto(Base):
         self.assertEqual(lida.status, StatusProspeccao.CONCLUIDA)
         self.assertEqual(prospeccoes.listar(p.id)[0].id, resultado.id)
         self.assertEqual(perfis.buscar(p.id).capital_minimo, 10000)
-
-    def test_prospecta_com_empresas_vindas_de_fonte_externa(self):
-        """Caso da BrasilAPI: as empresas ainda não estão no banco.
-
-        O lead tem chave estrangeira para estabelecimento, então o serviço
-        precisa gravar a empresa antes de gravar a prospecção.
-        """
-        nova = Empresa(
-            cnpj="11111111000111", razao_social="Vinda da API",
-            cnae_principal="6204000", porte=3, municipio_ibge="5205109",
-            cep="75700000",
-        )
-        p = ServicoPerfil(self.repo).cadastrar(
-            nome="TI em Catalão", cnaes_desejados=["6204000"], porte_desejado=3,
-            municipio_alvo_ibge="5205109",
-        )
-        prospeccoes = ServicoProspeccao(
-            self.repo, self.RecomendadorFalso(), fonte_empresas=lambda perfil: [nova]
-        )
-
-        resultado = prospeccoes.executar(p.id)
-
-        lida = prospeccoes.buscar(resultado.id)
-        self.assertEqual([l.cnpj for l in lida.leads], ["11111111000111"])
-        self.assertEqual(lida.leads[0].razao_social, "Vinda da API")
-        self.assertEqual(self.repo.buscar_empresa("11111111000111").cep, "75700000")
-
-    def test_fonte_externa_sem_cep_falha_com_mensagem_clara_e_sem_prospeccao(self):
-        sem_cep = Empresa(
-            cnpj="11111111000111", razao_social="Sem CEP",
-            cnae_principal="6204000", porte=3, municipio_ibge="5205109",
-        )
-        p = ServicoPerfil(self.repo).cadastrar(
-            nome="TI em Catalão", cnaes_desejados=["6204000"], porte_desejado=3,
-            municipio_alvo_ibge="5205109",
-        )
-        prospeccoes = ServicoProspeccao(
-            self.repo, self.RecomendadorFalso(), fonte_empresas=lambda perfil: [sem_cep]
-        )
-
-        with self.assertRaises(PersistenciaError) as contexto:
-            prospeccoes.executar(p.id)
-
-        self.assertIn("CEP", str(contexto.exception))
-        self.assertEqual(contar("prospeccao"), 0)
 
     def test_persiste_entre_instancias_do_repositorio(self):
         self.repo.salvar_perfil(perfil())

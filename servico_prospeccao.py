@@ -5,9 +5,7 @@ Fluxo de executar(perfil_id):
     2. obtém as empresas (do repositório, ou de uma fonte externa);
     3. chama o recomendador;
     4. converte as recomendações em Leads;
-    5. se as empresas vieram de uma fonte externa, grava as que viraram lead
-       (o banco exige que o CNPJ do lead já exista);
-    6. salva e devolve a Prospeccao.
+    5. salva e devolve a Prospeccao.
 """
 
 from typing import Callable, Optional
@@ -45,9 +43,6 @@ class ServicoProspeccao:
         recomendacoes = self._recomendar(empresas, perfil)
         leads = self._criar_leads(recomendacoes)
 
-        if self._fonte_empresas is not None:
-            self._gravar_empresas_dos_leads(empresas, leads)
-
         prospeccao = Prospeccao(
             perfil_id=perfil.id,
             leads=leads,
@@ -69,23 +64,6 @@ class ServicoProspeccao:
             return list(self._fonte_empresas(perfil))
 
         return self._repositorio.listar_empresas()
-
-    def _gravar_empresas_dos_leads(
-        self, empresas: list[Empresa], leads: list[Lead]
-    ) -> None:
-        """Grava no repositório as empresas (vindas da fonte) que viraram lead.
-
-        Em bancos com chaves estrangeiras (PostgreSQL), o lead só pode apontar
-        para uma empresa que já existe. Só as que viraram lead são gravadas, e
-        só depois que o recomendador respondeu: se ele falhar, nada é gravado.
-        Um lead cujo CNPJ não veio da fonte não é tratado aqui; quem avisa é o
-        próprio repositório, ao recusar a referência inexistente.
-        """
-        por_cnpj = {empresa.cnpj: empresa for empresa in empresas}
-        usadas = [por_cnpj[lead.cnpj] for lead in leads if lead.cnpj in por_cnpj]
-
-        if usadas:
-            self._repositorio.salvar_empresas(usadas)
 
     def _recomendar(self, empresas: list[Empresa], perfil: Perfil) -> list:
         try:

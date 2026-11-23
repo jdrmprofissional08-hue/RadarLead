@@ -159,46 +159,6 @@ class TestServicoProspeccao(unittest.TestCase):
         self.assertEqual(prospeccao.total_empresas_avaliadas, 1)
         self.assertEqual(recomendador.recebeu[0][0]["cnpj"], "33333333000133")
 
-    def test_empresas_da_fonte_que_viraram_lead_sao_gravadas(self):
-        recomendador = RecomendadorFalso([
-            {"cnpj": "33333333000133", "pontuacao": 90},
-        ])
-        fonte = lambda perfil: [
-            empresa("33333333000133", "C"),
-            empresa("44444444000144", "D"),   # avaliada, mas não virou lead
-        ]
-
-        self.servico(recomendador, fonte_empresas=fonte).executar(self.perfil.id)
-
-        cnpjs = {e.cnpj for e in self.repo.listar_empresas()}
-        self.assertIn("33333333000133", cnpjs)
-        self.assertNotIn("44444444000144", cnpjs)
-
-    def test_falha_do_recomendador_nao_grava_empresas_da_fonte(self):
-        fonte = lambda perfil: [empresa("33333333000133", "C")]
-        servico = self.servico(
-            RecomendadorQueFalha(KeyError("x")), fonte_empresas=fonte
-        )
-
-        with self.assertRaises(RecomendadorError):
-            servico.executar(self.perfil.id)
-
-        self.assertNotIn(
-            "33333333000133", {e.cnpj for e in self.repo.listar_empresas()}
-        )
-
-    def test_sem_fonte_nao_regrava_as_empresas_do_repositorio(self):
-        gravacoes = []
-        original = self.repo.salvar_empresas
-        self.repo.salvar_empresas = lambda e: gravacoes.append(e) or original(e)
-
-        recomendador = RecomendadorFalso([
-            {"cnpj": "11111111000111", "pontuacao": 50},
-        ])
-        self.servico(recomendador).executar(self.perfil.id)
-
-        self.assertEqual(gravacoes, [])
-
     def test_perfil_inexistente(self):
         with self.assertRaises(PerfilNaoEncontradoError):
             self.servico(RecomendadorFalso([])).executar(99)
