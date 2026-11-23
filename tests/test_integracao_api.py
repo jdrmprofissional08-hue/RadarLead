@@ -108,7 +108,12 @@ class TestIntegracaoAPI(unittest.TestCase):
             "cnaes_secundarios",
             "cep",
             "latitude",
-            "longitude"
+            "longitude",
+            "situacao_cadastral",
+            "natureza_juridica",
+            "capital_social",
+            "data_inicio_atividade",
+            "data_situacao"
         }
 
         self.assertEqual(set(empresa.keys()), campos_esperados)

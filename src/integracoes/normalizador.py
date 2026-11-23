@@ -1,4 +1,5 @@
 from math import isfinite
+from datetime import date
 
 class Normalizador:
     """Normaliza os dados recebidos da BrasilAPI."""
@@ -70,6 +71,25 @@ class Normalizador:
             if not cep:
                 cep = None
 
+        situacao = dados.get("situacao_cadastral")
+
+        if situacao is not None:
+            if isinstance(situacao, bool) or not isinstance(
+                situacao, (int, str)
+            ):
+                raise ValueError("Situacao cadastral invalida")
+
+            texto = str(situacao).strip()
+
+            if (
+                not texto.isdigit()
+                or len(texto) > 2
+                or int(texto) == 0
+            ):
+                raise ValueError("Situacao cadastral invalida")
+
+            situacao = int(texto)
+
         empresa = {
             "cnpj": cnpj,
             "razao_social": razao_social,
@@ -81,10 +101,92 @@ class Normalizador:
 ),
             "cep": cep,
             "latitude": None,
-            "longitude": None
+            "longitude": None,
+            "situacao_cadastral": situacao
         }
+        empresa.update(
+            self.normalizar_dados_cadastrais(dados)
+        )
 
         return empresa
+
+
+    def normalizar_dados_cadastrais(self, dados: dict) -> dict:
+        """Normaliza os campos cadastrais opcionais da BrasilAPI."""
+
+        natureza = dados.get("codigo_natureza_juridica")
+
+        if natureza is not None:
+            if isinstance(natureza, bool) or not isinstance(
+                natureza, (int, str)
+            ):
+                raise ValueError("Natureza juridica invalida")
+
+            natureza = str(natureza).strip()
+
+            if (
+                not natureza.isdigit()
+                or len(natureza) > 4
+                or int(natureza) == 0
+            ):
+                raise ValueError("Natureza juridica invalida")
+
+            natureza = natureza.zfill(4)
+
+        capital = dados.get("capital_social")
+
+        if capital is not None:
+            if isinstance(capital, bool) or not isinstance(
+                capital, (int, float, str)
+            ):
+                raise ValueError("Capital social invalido")
+
+            try:
+                capital = float(capital)
+            except (ValueError, OverflowError) as erro:
+                raise ValueError("Capital social invalido") from erro
+
+            if not isfinite(capital) or capital < 0:
+                raise ValueError("Capital social invalido")
+
+        inicio = self._normalizar_data(
+            dados.get("data_inicio_atividade"),
+            "Data de inicio"
+        )
+
+        situacao_data = self._normalizar_data(
+            dados.get("data_situacao_cadastral"),
+            "Data da situacao"
+        )
+
+        return {
+            "natureza_juridica": natureza,
+            "capital_social": capital,
+            "data_inicio_atividade": inicio,
+            "data_situacao": situacao_data
+        }
+
+    @staticmethod
+    def _normalizar_data(valor, nome: str) -> str | None:
+        """Valida uma data e retorna no formato AAAA-MM-DD."""
+
+        if valor is None or valor == "":
+            return None
+
+        if not isinstance(valor, str):
+            raise ValueError(f"{nome} invalida")
+
+        valor = valor.strip()
+
+        try:
+            data_validada = date.fromisoformat(valor)
+        except ValueError as erro:
+            raise ValueError(f"{nome} invalida") from erro
+
+        if len(valor) != 10 or data_validada <= date(1900, 1, 1):
+            raise ValueError(f"{nome} invalida")
+
+        return data_validada.isoformat()
 
     
     def normalizar_cnaes_secundarios(self, cnaes: list | None) -> list[str]:

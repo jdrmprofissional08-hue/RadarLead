@@ -210,6 +210,81 @@ class TestNormalizador(unittest.TestCase):
             self.normalizador.normalizar_cep(dados)
 
 
+    def test_situacao_cadastral_ativa(self):
+        dados = {
+            **self.dados,
+            "situacao_cadastral": "02"
+        }
+
+        resultado = self.normalizador.normalizar_cnpj(dados)
+
+        self.assertEqual(resultado["situacao_cadastral"], 2)
+
+    def test_situacao_cadastral_ausente(self):
+        resultado = self.normalizador.normalizar_cnpj(
+            self.dados
+        )
+
+        self.assertIsNone(resultado["situacao_cadastral"])
+
+    def test_situacao_cadastral_invalida(self):
+        for valor in ["ATIVA", 0, True, -1]:
+            with self.subTest(valor=valor):
+                dados = {
+                    **self.dados,
+                    "situacao_cadastral": valor
+                }
+
+                with self.assertRaises(ValueError):
+                    self.normalizador.normalizar_cnpj(dados)
+
+
+    def test_dados_cadastrais_completos(self):
+        dados = {
+            **self.dados,
+            "codigo_natureza_juridica": 2062,
+            "capital_social": 150000.50,
+            "data_inicio_atividade": "2020-05-10",
+            "data_situacao_cadastral": "2024-02-15"
+        }
+
+        resultado = self.normalizador.normalizar_cnpj(dados)
+
+        self.assertEqual(resultado["natureza_juridica"], "2062")
+        self.assertEqual(resultado["capital_social"], 150000.50)
+        self.assertEqual(
+            resultado["data_inicio_atividade"], "2020-05-10"
+        )
+        self.assertEqual(
+            resultado["data_situacao"], "2024-02-15"
+        )
+
+    def test_dados_cadastrais_ausentes(self):
+        resultado = self.normalizador.normalizar_cnpj(
+            self.dados
+        )
+
+        self.assertIsNone(resultado["natureza_juridica"])
+        self.assertIsNone(resultado["capital_social"])
+        self.assertIsNone(resultado["data_inicio_atividade"])
+        self.assertIsNone(resultado["data_situacao"])
+
+    def test_dados_cadastrais_invalidos(self):
+        casos = [
+            ("codigo_natureza_juridica", True),
+            ("capital_social", -100),
+            ("data_inicio_atividade", "2024-02-30"),
+            ("data_situacao_cadastral", "data errada")
+        ]
+
+        for campo, valor in casos:
+            with self.subTest(campo=campo):
+                dados = {**self.dados, campo: valor}
+
+                with self.assertRaises(ValueError):
+                    self.normalizador.normalizar_cnpj(dados)
+
+
 if __name__ == "__main__":
     unittest.main()
  
