@@ -28,6 +28,9 @@ beforeEach(() => {
   }
   enviar = vi.fn(() => resposta(201, { perfil, leads: [lead] }))
   vi.stubGlobal('fetch', vi.fn(async (url, opcoes) => {
+    if (url === '/dados-locais/coordenadas-municipios.json') {
+      return resposta(200, { '5205109': [-12.345, -45.678], '3170206': [-11, -46] })
+    }
     const caminho = new URL(url).pathname
     if (caminho === '/api/prospeccoes') return enviar(JSON.parse(opcoes.body))
     return dadosApi[caminho]()
@@ -389,4 +392,49 @@ it('informa a limitação do modo simulado sem consultar localização nem exibi
   await screen.findByText(/Empresa Exemplo Gama/)
   expect(screen.queryByText(/distância/i)).not.toBeInTheDocument()
   expect(fetch).not.toHaveBeenCalled()
+})
+
+it.each([
+  ['manter', undefined],
+  ['associar', 13],
+  ['remover', null],
+])('envia origem municipal e preserva a intenção de %s produto no JSON', async (intencao, produto) => {
+  abrir()
+  await consultarVinculado()
+  if (intencao === 'associar') escolher(produto)
+  if (intencao === 'remover') fireEvent.click(screen.getByRole('button', { name: 'Remover associação' }))
+
+  fireEvent.click(screen.getByRole('radio', { name: 'Selecionar município de origem' }))
+  await screen.findByLabelText('Município de origem')
+  preencher('Município de origem', '5205109')
+  fireEvent.click(screen.getByRole('option', { name: /Catalão/ }))
+  buscar()
+  await screen.findByText(lead.razao_social)
+  expect(ultimaBusca().origem).toStrictEqual({ latitude: -12.345, longitude: -45.678 })
+  expect(ultimaBusca().municipio_alvo_ibge).toBe('5208707')
+  expect(Object.hasOwn(ultimaBusca(), 'produto_id')).toBe(intencao !== 'manter')
+  if (intencao !== 'manter') expect(ultimaBusca().produto_id).toBe(produto)
+
+  preencher('Município de origem', '3170206')
+  fireEvent.click(screen.getByRole('option', { name: /Uberlândia/ }))
+  expect(screen.queryByText(lead.razao_social)).not.toBeInTheDocument()
+})
+
+it('descarta leads de uma requisição pendente após trocar o município de origem', async () => {
+  abrir()
+  const pendente = Promise.withResolvers()
+  enviar.mockReturnValueOnce(pendente.promise)
+  fireEvent.click(screen.getByRole('radio', { name: 'Selecionar município de origem' }))
+  await screen.findByLabelText('Município de origem')
+  preencher('Município de origem', '5205109')
+  fireEvent.click(screen.getByRole('option', { name: /Catalão/ }))
+  buscar()
+  expect(enviar).toHaveBeenCalledOnce()
+  preencher('Município de origem', '3170206')
+  fireEvent.click(screen.getByRole('option', { name: /Uberlândia/ }))
+  await act(async () => pendente.resolve(resposta(201, { perfil, leads: [lead] })))
+  expect(screen.queryByText(lead.razao_social)).not.toBeInTheDocument()
+  buscar()
+  await screen.findByText(lead.razao_social)
+  expect(ultimaBusca().origem).toEqual({ latitude: -11, longitude: -46 })
 })

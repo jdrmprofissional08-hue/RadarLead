@@ -1,5 +1,6 @@
 export const origemInicial = {
   modo: 'servidor',
+  municipioOrigem: '',
   latitude: '',
   longitude: '',
   raioPadrao: true,
@@ -14,18 +15,42 @@ function lerDecimal(entrada) {
   return Number.isFinite(valor) ? valor : null
 }
 
-export function validarOrigem(configuracao) {
+function latitudeValida(valor) {
+  return Number.isFinite(valor) && valor >= -90 && valor <= 90
+}
+
+function longitudeValida(valor) {
+  return Number.isFinite(valor) && valor >= -180 && valor <= 180
+}
+
+export function coordenadasValidas(par) {
+  return Array.isArray(par) && par.length === 2 &&
+    latitudeValida(par[0]) && longitudeValida(par[1])
+}
+
+export function validarOrigem(configuracao, catalogo) {
   if (configuracao.modo === 'servidor') return { erros: {} }
 
-  const latitude = lerDecimal(configuracao.latitude)
-  const longitude = lerDecimal(configuracao.longitude)
+  const municipal = configuracao.modo === 'municipio'
+  const ponto = catalogo?.[configuracao.municipioOrigem]
+  const pontoValido = coordenadasValidas(ponto)
+  const [latitude, longitude] = municipal
+    ? (pontoValido ? ponto : [])
+    : [lerDecimal(configuracao.latitude), lerDecimal(configuracao.longitude)]
   const erros = {}
   const origem = { latitude, longitude }
 
-  if (latitude === null || latitude < -90 || latitude > 90) {
+  if (municipal && !pontoValido) {
+    erros.municipioOrigem = !catalogo
+      ? 'O catálogo local precisa estar disponível para usar a origem municipal.'
+      : configuracao.municipioOrigem
+        ? 'O município selecionado não tem coordenadas disponíveis.'
+        : 'Selecione um município de origem.'
+  }
+  if (!municipal && !latitudeValida(latitude)) {
     erros.latitude = 'Informe uma latitude decimal entre -90 e 90.'
   }
-  if (longitude === null || longitude < -180 || longitude > 180) {
+  if (!municipal && !longitudeValida(longitude)) {
     erros.longitude = 'Informe uma longitude decimal entre -180 e 180.'
   }
   if (!configuracao.raioPadrao) {

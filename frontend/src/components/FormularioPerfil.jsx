@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import OrigemProspeccao from './OrigemProspeccao.jsx'
+import useCatalogoCoordenadas from './useCatalogoCoordenadas.js'
 import { origemInicial, validarOrigem } from '../utils/origemProspeccao.js'
 import ProdutoDoPerfil from './ProdutoDoPerfil.jsx'
 import PesquisaCnae from './PesquisaCnae.jsx'
@@ -25,6 +26,7 @@ function ErroCampo({ campo, mensagem }) {
 
 export default function FormularioPerfil({ onBuscar, onAlterar, buscando, associacao, modo }) {
   const [configuracaoOrigem, setConfiguracaoOrigem] = useState(origemInicial)
+  const catalogo = useCatalogoCoordenadas(modo === 'http' && configuracaoOrigem.modo === 'municipio')
   const [nome, setNome] = useState('')
   const [cnaes, setCnaes] = useState([])
   const [porte, setPorte] = useState('')
@@ -56,16 +58,19 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando, associ
     evento.preventDefault()
     if (buscando) return
     const resultado = validarPerfil({ nome, cnaes, porte, municipio, pesos })
-    const geografia = modo === 'http' ? validarOrigem(configuracaoOrigem) : { erros: {} }
+    const geografia = modo === 'http' ? validarOrigem(configuracaoOrigem, catalogo.dados) : { erros: {} }
     const errosEnvio = { ...resultado.erros, ...geografia.erros }
     setErros(errosEnvio)
 
-    const ordemCampos = ['nome', 'cnae', 'porte', 'municipio', 'latitude', 'longitude', 'raio',
+    const ordemCampos = ['nome', 'cnae', 'porte', 'municipio', 'municipioOrigem', 'latitude', 'longitude', 'raio',
       ...criterios.map(({ chave }) => chave), 'totalPesos']
     const primeiroCampo = ordemCampos.find((campo) => errosEnvio[campo])
     if (primeiroCampo) {
       const campoFoco = primeiroCampo === 'totalPesos' ? 'peso_cnae' : primeiroCampo
-      evento.currentTarget.elements.namedItem(campoFoco)?.focus()
+      const controle = evento.currentTarget.elements.namedItem(campoFoco)
+      const alternativa = primeiroCampo === 'municipioOrigem' && evento.currentTarget.querySelector('#modo-origem-municipio')
+      const alvo = controle || alternativa
+      alvo?.focus()
       return
     }
 
@@ -151,12 +156,13 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando, associ
       <OrigemProspeccao
         modoHttp={modo === 'http'}
         configuracao={configuracaoOrigem}
+        catalogo={catalogo}
         atributosCampo={atributosCampo}
         estiloCampo={estiloCampo}
         renderizarErro={(campo) => <ErroCampo campo={campo} mensagem={erros[campo]} />}
         onAlterar={(campo, valor) => {
           setConfiguracaoOrigem((atual) => ({ ...atual, [campo]: valor }))
-          setErros((atuais) => ({ ...atuais, latitude: undefined, longitude: undefined, raio: undefined }))
+          setErros((atuais) => ({ ...atuais, municipioOrigem: undefined, latitude: undefined, longitude: undefined, raio: undefined }))
           onAlterar()
         }}
       />

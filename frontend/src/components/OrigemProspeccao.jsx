@@ -1,7 +1,11 @@
-export default function OrigemProspeccao({ modoHttp, configuracao, onAlterar, atributosCampo, estiloCampo, renderizarErro }) {
+import PesquisaMunicipio from './PesquisaMunicipio.jsx'
+
+export default function OrigemProspeccao({ modoHttp, configuracao, catalogo, onAlterar, atributosCampo, estiloCampo, renderizarErro }) {
   const campos = [
-    { chave: 'latitude', rotulo: 'Latitude' },
-    { chave: 'longitude', rotulo: 'Longitude' },
+    ...(configuracao.modo === 'manual' ? [
+      { chave: 'latitude', rotulo: 'Latitude' },
+      { chave: 'longitude', rotulo: 'Longitude' },
+    ] : []),
     ...(!configuracao.raioPadrao ? [{ chave: 'raio', rotulo: 'Raio (km)' }] : []),
   ]
 
@@ -19,11 +23,41 @@ export default function OrigemProspeccao({ modoHttp, configuracao, onAlterar, at
               Usar configuração do servidor
             </label>
             <label className="flex min-h-10 items-center gap-2">
+              <input type="radio" name="modo-origem" id="modo-origem-municipio"
+                aria-describedby={configuracao.modo === 'municipio' && catalogo.etapa !== 'pronto'
+                  ? atributosCampo('municipioOrigem')['aria-describedby'] : undefined}
+                checked={configuracao.modo === 'municipio'}
+                onChange={() => onAlterar('modo', 'municipio')} />
+              Selecionar município de origem
+            </label>
+            <label className="flex min-h-10 items-center gap-2">
               <input type="radio" name="modo-origem" checked={configuracao.modo === 'manual'}
                 onChange={() => onAlterar('modo', 'manual')} />
               Informar coordenadas manualmente
             </label>
           </div>
+          {configuracao.modo === 'municipio' && (
+            <div className="min-w-0 space-y-2">
+              <p className="text-sm text-suave">A distância será calculada a partir de um ponto de referência do município, não do endereço exato da empresa.</p>
+              <p className="text-xs text-suave">Fonte das coordenadas: IBGE — Localidades do Brasil.</p>
+              {catalogo.etapa === 'carregando' && <p role="status">Carregando catálogo local…</p>}
+              {catalogo.etapa === 'erro' && (
+                <>
+                  <p role="alert" className="text-sm text-erro">{catalogo.mensagem} Siga as instruções de geração local no README do frontend ou informe coordenadas manualmente.</p>
+                  <button type="button" onClick={catalogo.tentarNovamente}
+                    className="min-h-11 rounded-lg border border-controle px-3 text-sm font-semibold">Tentar carregar novamente</button>
+                </>
+              )}
+              {catalogo.etapa === 'pronto' && (
+                <PesquisaMunicipio atributos={atributosCampo('municipioOrigem', 'municipioOrigem-ajuda')}
+                  estiloCampo={estiloCampo} codigo={configuracao.municipioOrigem}
+                  rotulo="Município de origem" rotuloLista="Sugestões de municípios de origem"
+                  rotuloRemocao="município de origem"
+                  onAlterar={(codigo) => onAlterar('municipioOrigem', codigo)} />
+              )}
+              {renderizarErro('municipioOrigem')}
+            </div>
+          )}
           {configuracao.modo === 'servidor' ? (
             <p className="text-sm text-suave">As coordenadas e o raio serão definidos pelo servidor.</p>
           ) : (
@@ -33,7 +67,7 @@ export default function OrigemProspeccao({ modoHttp, configuracao, onAlterar, at
                   onChange={(evento) => onAlterar('raioPadrao', evento.target.checked)} />
                 Usar raio padrão do servidor
               </label>
-              <p id="origem-ajuda" className="text-sm text-suave">Use ponto ou vírgula para decimais, sem separadores de milhares.</p>
+              {campos.length > 0 && <p id="origem-ajuda" className="text-sm text-suave">Use ponto ou vírgula para decimais, sem separadores de milhares.</p>}
               <div className="grid gap-4 sm:grid-cols-2">
                 {campos.map(({ chave, rotulo }) => (
                   <div key={chave} className="min-w-0">
