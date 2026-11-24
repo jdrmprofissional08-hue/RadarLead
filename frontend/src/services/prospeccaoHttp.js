@@ -1,13 +1,13 @@
-const urlPadrao = 'http://127.0.0.1:8000'
+import { obterUrlApi } from './urlApi.js'
+
 const erroResposta = 'A API retornou uma resposta de prospecção inválida.'
 
 export class ErroProspeccaoHttp extends Error {}
 
 export async function buscarEmpresasHttp(perfil) {
-  const base = (import.meta.env.VITE_RADARLEAD_API_URL?.trim() || urlPadrao).replace(/\/+$/, '')
   let resposta
   try {
-    resposta = await fetch(`${base}/api/prospeccoes`, {
+    resposta = await fetch(`${obterUrlApi()}/api/prospeccoes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(perfil),

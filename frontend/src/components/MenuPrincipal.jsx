@@ -12,6 +12,7 @@ export default function MenuPrincipal() {
         <ul className="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-2 sm:basis-auto">
           {[
             { caminho: '/', rotulo: 'Início' },
+            { caminho: '/minha-empresa', rotulo: 'Minha empresa' },
             { caminho: '/perfil', rotulo: 'Perfil de Prospecção' },
           ].map(({ caminho, rotulo }) => (
             <li key={caminho}>
