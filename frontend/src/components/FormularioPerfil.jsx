@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import ProdutoDoPerfil from './ProdutoDoPerfil.jsx'
 import PesquisaCnae from './PesquisaCnae.jsx'
 import PesquisaMunicipio from './PesquisaMunicipio.jsx'
 import {
@@ -20,7 +21,7 @@ function ErroCampo({ campo, mensagem }) {
   )
 }
 
-export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
+export default function FormularioPerfil({ onBuscar, onAlterar, buscando, associacao }) {
   const [nome, setNome] = useState('')
   const [cnaes, setCnaes] = useState([])
   const [porte, setPorte] = useState('')
@@ -75,12 +76,18 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando }) {
           value={nome}
           onChange={(evento) => {
             setNome(evento.target.value)
+            associacao?.mudarNome()
             limparValidacao('nome')
+          }}
+          onBlur={() => {
+            if (associacao?.consulta.etapa === 'inicial') associacao.consultar(nome)
           }}
           className={estiloCampo}
         />
         <ErroCampo campo="nome" mensagem={erros.nome} />
       </div>
+
+      {associacao && <ProdutoDoPerfil associacao={associacao} nome={nome} buscando={buscando} />}
 
       <fieldset className="min-w-0 space-y-3">
         <legend className="mb-2 font-semibold text-marinho">CNAEs desejados</legend>

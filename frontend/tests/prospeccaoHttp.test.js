@@ -42,7 +42,7 @@ afterEach(() => {
 describe('Serviço HTTP', () => {
   it('envia o objeto plano v1.0 e preserva os dados do lead, incluindo pontuação zero', async () => {
     responder(201, { leads: [{ ...lead, campoExtra: true }], total_leads: 1, total_empresas_avaliadas: 2 })
-    await expect(buscarEmpresasHttp(perfil)).resolves.toStrictEqual([lead])
+    await expect(buscarEmpresasHttp(perfil)).resolves.toStrictEqual({ leads: [lead], perfil: null })
     expect(fetch).toHaveBeenCalledExactlyOnceWith('http://127.0.0.1:8000/api/prospeccoes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -53,7 +53,7 @@ describe('Serviço HTTP', () => {
   it('aceita lista vazia e usa a URL configurada', async () => {
     vi.stubEnv('VITE_RADARLEAD_API_URL', 'http://localhost:8001/')
     responder(201, { leads: [], total_leads: 0, total_empresas_avaliadas: 2 })
-    await expect(buscarEmpresasHttp(perfil)).resolves.toEqual([])
+    await expect(buscarEmpresasHttp(perfil)).resolves.toEqual({ leads: [], perfil: null })
     expect(fetch.mock.calls[0][0]).toBe('http://localhost:8001/api/prospeccoes')
   })
 
@@ -91,7 +91,7 @@ describe('Serviço HTTP', () => {
   it('aceita campos cadastrais nulos no lead', async () => {
     const incompleto = { ...lead, cnae_principal: null, porte: null, porte_descricao: null, municipio_ibge: null }
     responder(201, { leads: [incompleto] })
-    await expect(buscarEmpresasHttp(perfil)).resolves.toEqual([incompleto])
+    await expect(buscarEmpresasHttp(perfil)).resolves.toEqual({ leads: [incompleto], perfil: null })
   })
 })
 

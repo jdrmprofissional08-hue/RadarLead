@@ -1,3 +1,4 @@
+import { adaptarVinculoPerfil } from './perfisHttp.js'
 import { obterUrlApi } from './urlApi.js'
 
 const erroResposta = 'A API retornou uma resposta de prospecção inválida.'
@@ -30,7 +31,7 @@ export async function buscarEmpresasHttp(perfil) {
     throw new ErroProspeccaoHttp(erroResposta)
   }
 
-  return dados.leads.map((lead) => {
+  const leads = dados.leads.map((lead) => {
     if (
       !lead || typeof lead.cnpj !== 'string' || typeof lead.razao_social !== 'string' ||
       !Number.isFinite(lead.pontuacao) || !Array.isArray(lead.justificativas) ||
@@ -48,4 +49,5 @@ export async function buscarEmpresasHttp(perfil) {
     } = lead
     return { cnpj, razao_social, pontuacao, justificativas, cnae_principal, porte, porte_descricao, municipio_ibge, status }
   })
+  return { leads, perfil: adaptarVinculoPerfil(dados.perfil) }
 }

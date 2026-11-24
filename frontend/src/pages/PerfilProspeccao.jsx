@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import useProdutoDoPerfil from '../components/useProdutoDoPerfil.js'
 import FormularioPerfil from '../components/FormularioPerfil.jsx'
 import ListaResultados from '../components/ListaResultados.jsx'
 import { obterServicoProspeccao } from '../services/prospeccao.js'
@@ -9,19 +10,24 @@ export default function PerfilProspeccao() {
   const buscaAtual = useRef(0)
   const { modo, buscarEmpresas } = obterServicoProspeccao()
 
+  const associacao = useProdutoDoPerfil()
+
   function invalidarBusca() {
     buscaAtual.current += 1
     setBusca({ etapa: 'inicial' })
   }
 
   async function buscar(dados) {
+    const perfil = modo === 'http' ? associacao.preparar(dados) : dados
+    if (!perfil) return
     const idBusca = ++buscaAtual.current
     setBusca({ etapa: 'carregando' })
 
     try {
-      const resultados = await buscarEmpresas(dados)
+      const retorno = await buscarEmpresas(perfil)
       if (idBusca === buscaAtual.current) {
-        setBusca({ etapa: 'concluida', resultados })
+        if (modo === 'http') associacao.confirmar(retorno.perfil, perfil)
+        setBusca({ etapa: 'concluida', resultados: modo === 'http' ? retorno.leads : retorno })
       }
     } catch (erro) {
       if (idBusca === buscaAtual.current) {
@@ -47,6 +53,7 @@ export default function PerfilProspeccao() {
       </p>
       <FormularioPerfil
         onBuscar={buscar}
+        associacao={modo === 'http' ? associacao : null}
         onAlterar={invalidarBusca}
         buscando={busca.etapa === 'carregando'}
       />
