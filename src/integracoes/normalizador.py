@@ -43,6 +43,7 @@ class Normalizador:
         if len(cnae) != 7 or not cnae.isdigit():
             raise ValueError("CNAE principal invalido")
 
+
         porte_original = dados["codigo_porte"]
 
         if isinstance(porte_original, bool):
@@ -53,16 +54,22 @@ class Normalizador:
         except (ValueError, TypeError, OverflowError) as erro:
             raise ValueError("Porte invalido") from erro
 
-        if porte <= 0 or (
-            isinstance(porte_original, float)
-            and not porte_original.is_integer()
+        if (
+            porte not in (0, 1, 3, 5)
+            or (
+                isinstance(porte_original, float)
+                and not porte_original.is_integer()
+            )
         ):
-            raise ValueError("Porte invalido")
+            raise ValueError(
+                "Porte invalido: valores permitidos 0, 1, 3 ou 5"
+            )
 
         municipio = str(dados["codigo_municipio_ibge"]).strip()
 
         if len(municipio) != 7 or not municipio.isdigit():
             raise ValueError("Codigo IBGE invalido")
+
 
         cep = dados.get("cep")
 

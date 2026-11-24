@@ -75,6 +75,7 @@ class TestClienteBrasilAPI(unittest.TestCase):
             {},
             None
         )
+        self.addCleanup(erro.close)
 
         with patch(
             "src.integracoes.brasilapi.urlopen",

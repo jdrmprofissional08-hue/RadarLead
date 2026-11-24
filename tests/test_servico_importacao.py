@@ -108,5 +108,48 @@ class TestServicoImportacaoEmpresas(unittest.TestCase):
         )
 
 
+    def test_erro_de_dominio_nao_interrompe_importacao(self):
+
+        class ErroDeDominioSimulado(Exception):
+            pass
+
+        # Informa ao servico qual excecao deve tratar.
+        self.servico = ServicoImportacaoEmpresas(
+            self.consulta,
+            self.repositorio,
+            erros_dominio=(ErroDeDominioSimulado,)
+        )
+
+        def consultar(cnpj, classe_empresa=None):
+            if cnpj == "22222222000122":
+                raise ErroDeDominioSimulado(
+                    "Dados empresariais invalidos"
+                )
+
+            return SimpleNamespace(cnpj=cnpj)
+
+        self.consulta.consultar_empresa.side_effect = consultar
+
+        resultado = self.servico.importar_cnpjs([
+            "11111111000111",
+            "22222222000122",
+            "33333333000133"
+        ])
+
+        self.assertEqual(
+            resultado["importados"],
+            ["11111111000111", "33333333000133"]
+        )
+
+        self.assertEqual(
+            len(resultado["falhas"]),
+            1
+        )
+
+        self.assertEqual(
+            self.repositorio.salvar_empresa.call_count,
+            2
+        )
+
 if __name__ == "__main__":
     unittest.main()

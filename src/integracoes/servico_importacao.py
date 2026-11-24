@@ -1,10 +1,30 @@
 
+from importlib import import_module
+
+
+def obter_erros_dominio():
+    """Carrega as excecoes do backend quando disponivel."""
+    try:
+        modulo = import_module("src.excecoes")
+    except ModuleNotFoundError as erro:
+        if erro.name != "src.excecoes":
+            raise
+        return ()
+
+    return (modulo.DadosInvalidosError,)
+
+
 class ServicoImportacaoEmpresas:
     """Importa empresas consultadas para um repositorio."""
 
-    def __init__(self, consulta, repositorio):
+    def __init__(self, consulta, repositorio, erros_dominio=None):
         self.consulta = consulta
         self.repositorio = repositorio
+
+        if erros_dominio is None:
+            erros_dominio = obter_erros_dominio()
+
+        self.erros_dominio = tuple(erros_dominio)
 
     def importar_cnpjs(self, cnpjs, classe_empresa=None):
         if not isinstance(cnpjs, list):
@@ -17,13 +37,17 @@ class ServicoImportacaoEmpresas:
             "falhas": []
         }
 
-        # Consulta as empresas que ja estao no repositorio.
         existentes = {
             empresa.cnpj
             for empresa in self.repositorio.listar_empresas()
         }
 
         vistos = set()
+
+        erros_recuperaveis = (
+            ValueError,
+            ConnectionError
+        ) + self.erros_dominio
 
         for original in cnpjs:
             if not isinstance(original, str):
@@ -48,14 +72,12 @@ class ServicoImportacaoEmpresas:
                 })
                 continue
 
-            # Evita repeticoes dentro da lista recebida.
             if cnpj in vistos:
                 resultado["duplicados"].append(cnpj)
                 continue
 
             vistos.add(cnpj)
 
-            # Evita consultar empresas ja cadastradas.
             if cnpj in existentes:
                 resultado["ja_cadastrados"].append(cnpj)
                 continue
@@ -66,14 +88,13 @@ class ServicoImportacaoEmpresas:
                     classe_empresa=classe_empresa
                 )
 
-            except (ValueError, ConnectionError) as erro:
+            except erros_recuperaveis as erro:
                 resultado["falhas"].append({
                     "cnpj": cnpj,
                     "erro": str(erro)
                 })
                 continue
 
-            # Persiste a empresa e atualiza o conjunto local.
             self.repositorio.salvar_empresa(empresa)
             existentes.add(cnpj)
 

@@ -285,6 +285,28 @@ class TestNormalizador(unittest.TestCase):
                     self.normalizador.normalizar_cnpj(dados)
 
 
+    def test_porte_zero_aceito(self):
+        dados = {
+            **self.dados,
+            "codigo_porte": 0
+        }
+
+        resultado = self.normalizador.normalizar_cnpj(dados)
+
+        self.assertEqual(resultado["porte"], 0)
+
+    def test_porte_fora_do_contrato(self):
+        for codigo in [2, 4, 9]:
+            with self.subTest(codigo=codigo):
+                dados = {
+                    **self.dados,
+                    "codigo_porte": codigo
+                }
+
+                with self.assertRaises(ValueError):
+                    self.normalizador.normalizar_cnpj(dados)
+
+
 if __name__ == "__main__":
     unittest.main()
  
