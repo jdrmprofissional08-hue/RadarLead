@@ -27,7 +27,10 @@ function salvar() {
 beforeEach(() => {
   vi.stubEnv('VITE_RADARLEAD_MODO', 'http')
   vi.stubEnv('VITE_RADARLEAD_API_URL', 'http://localhost:8001/')
-  vi.stubGlobal('fetch', vi.fn())
+  vi.stubGlobal('fetch', vi.fn((url) => {
+    if (url === 'http://localhost:8001/api/produtos') return Promise.resolve(resposta(200, { produtos: [] }))
+    throw new Error('Requisição não prevista: ' + url)
+  }))
 })
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -43,7 +46,7 @@ it('abre Minha empresa pelo menu, mostra o aviso e consulta o cadastro existente
   expect(await screen.findByDisplayValue(empresa.nome)).toBeInTheDocument()
   expect(screen.getByLabelText('CNPJ')).toHaveValue(empresa.cnpj)
   expect(screen.getByLabelText('E-mail')).toHaveValue(empresa.email)
-  expect(fetch).toHaveBeenCalledExactlyOnceWith(endpoint, expect.objectContaining({ method: 'GET' }))
+  expect(fetch).toHaveBeenNthCalledWith(1, endpoint, expect.objectContaining({ method: 'GET' }))
 })
 
 it('exibe carregamento até o GET confirmar a ausência do cadastro', async () => {
@@ -72,20 +75,21 @@ it('envia CNPJ normalizado sem ID e só confirma a criação após o PUT 201', a
   expect(screen.getByRole('status')).toHaveTextContent('Salvando empresa')
   expect(screen.queryByText(/salvos com sucesso/)).not.toBeInTheDocument()
   await act(async () => { gravacao.resolve(resposta(201, empresa)) })
-  expect(screen.getByRole('status')).toHaveTextContent('Dados da empresa salvos com sucesso.')
+  expect(screen.getByText('Dados da empresa salvos com sucesso.')).toBeInTheDocument()
   expect(screen.queryByText(/Nenhuma empresa cadastrada/)).not.toBeInTheDocument()
   expect(screen.getByLabelText('CNPJ')).toHaveValue(empresa.cnpj)
 })
 
 it('permite atualizar com PUT 200 e usa os dados devolvidos pelo servidor', async () => {
   fetch.mockResolvedValueOnce(resposta(200, empresa))
+    .mockResolvedValueOnce(resposta(200, { produtos: [] }))
     .mockResolvedValueOnce(resposta(200, { ...empresa, nome: 'Nome confirmado' }))
   render(<MinhaEmpresa />)
   await screen.findByDisplayValue(empresa.nome)
   preencher('Nome da empresa', 'Nome atualizado')
   salvar()
   expect(await screen.findByDisplayValue('Nome confirmado')).toBeInTheDocument()
-  expect(screen.getByRole('status')).toHaveTextContent('salvos com sucesso')
+  expect(screen.getByText('Dados da empresa salvos com sucesso.')).toBeInTheDocument()
 })
 
 it('associa os erros de nome, dígitos do CNPJ e e-mail aos campos e impede o PUT', async () => {

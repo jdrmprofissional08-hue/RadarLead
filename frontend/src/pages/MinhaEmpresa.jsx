@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import ProdutosEmpresa from '../components/ProdutosEmpresa.jsx'
 import { consultarEmpresa, salvarEmpresa } from '../services/empresaUsuariaHttp.js'
 import { empresaVazia, validarEmpresa } from '../utils/empresaUsuaria.js'
 
@@ -55,55 +56,61 @@ function CadastroEmpresa() {
   }
   if (consulta.etapa === 'erro') {
     return (
-      <div className="mt-6 rounded-xl border border-divisor bg-superficie p-5">
-        <p role="alert" className="text-erro">Falha na consulta. {consulta.mensagem}</p>
-        <button type="button" onClick={() => {
-          setConsulta({ etapa: 'carregando' })
-          setTentativa((atual) => atual + 1)
-        }} className="mt-3 min-h-11 rounded-lg bg-turquesa px-4 font-semibold text-marinho">
-          Tentar novamente
-        </button>
-      </div>
+      <>
+        <div className="mt-6 rounded-xl border border-divisor bg-superficie p-5">
+          <p role="alert" className="text-erro">Falha na consulta. {consulta.mensagem}</p>
+          <button type="button" onClick={() => {
+            setConsulta({ etapa: 'carregando' })
+            setTentativa((atual) => atual + 1)
+          }} className="mt-3 min-h-11 rounded-lg bg-turquesa px-4 font-semibold text-marinho">
+            Tentar novamente
+          </button>
+        </div>
+        <ProdutosEmpresa estadoEmpresa="erro" />
+      </>
     )
   }
 
   const salvando = envio.etapa === 'salvando'
   return (
-    <form noValidate onSubmit={enviar} className="mt-6 max-w-2xl space-y-4 rounded-2xl border border-divisor bg-superficie p-5 sm:p-8">
-      {consulta.etapa === 'vazia' && <p className="text-suave">Nenhuma empresa cadastrada. Preencha os dados para criar o cadastro.</p>}
-      <fieldset disabled={salvando} className="min-w-0 space-y-4">
-        <legend className="font-semibold text-marinho">Dados da empresa</legend>
-        {campos.map(({ chave, rotulo, ...atributos }) => (
-          <div key={chave}>
-            <label htmlFor={`empresa-${chave}`} className="mb-2 block text-sm font-semibold">{rotulo}</label>
-            <input
-              {...atributos}
-              id={`empresa-${chave}`}
-              name={chave}
-              required
-              value={dados[chave]}
-              aria-invalid={Boolean(erros[chave])}
-              aria-describedby={erros[chave] ? `erro-empresa-${chave}` : undefined}
-              onChange={(evento) => {
-                setDados({ ...dados, [chave]: evento.target.value })
-                setErros({ ...erros, [chave]: undefined })
-                setEnvio({ etapa: 'inicial' })
-              }}
-              className="w-full rounded-lg border border-controle bg-superficie px-3 py-2.5 aria-invalid:border-erro"
-            />
-            {erros[chave] && <p id={`erro-empresa-${chave}`} className="mt-2 text-sm text-erro">{erros[chave]}</p>}
-          </div>
-        ))}
-        <button type="submit" className="min-h-11 w-full rounded-lg bg-turquesa px-4 text-sm font-semibold text-marinho disabled:opacity-60 sm:w-auto">
-          Salvar empresa
-        </button>
-      </fieldset>
-      <div role="status" className="text-sm text-acao">
-        {salvando && 'Salvando empresa…'}
-        {envio.etapa === 'sucesso' && 'Dados da empresa salvos com sucesso.'}
-      </div>
-      {envio.etapa === 'erro' && <p role="alert" className="text-sm text-erro">{envio.mensagem}</p>}
-    </form>
+    <>
+      <form noValidate onSubmit={enviar} className="mt-6 max-w-2xl space-y-4 rounded-2xl border border-divisor bg-superficie p-5 sm:p-8">
+        {consulta.etapa === 'vazia' && <p className="text-suave">Nenhuma empresa cadastrada. Preencha os dados para criar o cadastro.</p>}
+        <fieldset disabled={salvando} className="min-w-0 space-y-4">
+          <legend className="font-semibold text-marinho">Dados da empresa</legend>
+          {campos.map(({ chave, rotulo, ...atributos }) => (
+            <div key={chave}>
+              <label htmlFor={`empresa-${chave}`} className="mb-2 block text-sm font-semibold">{rotulo}</label>
+              <input
+                {...atributos}
+                id={`empresa-${chave}`}
+                name={chave}
+                required
+                value={dados[chave]}
+                aria-invalid={Boolean(erros[chave])}
+                aria-describedby={erros[chave] ? `erro-empresa-${chave}` : undefined}
+                onChange={(evento) => {
+                  setDados({ ...dados, [chave]: evento.target.value })
+                  setErros({ ...erros, [chave]: undefined })
+                  setEnvio({ etapa: 'inicial' })
+                }}
+                className="w-full rounded-lg border border-controle bg-superficie px-3 py-2.5 aria-invalid:border-erro"
+              />
+              {erros[chave] && <p id={`erro-empresa-${chave}`} className="mt-2 text-sm text-erro">{erros[chave]}</p>}
+            </div>
+          ))}
+          <button type="submit" className="min-h-11 w-full rounded-lg bg-turquesa px-4 text-sm font-semibold text-marinho disabled:opacity-60 sm:w-auto">
+            Salvar empresa
+          </button>
+        </fieldset>
+        <div role="status" className="text-sm text-acao">
+          {salvando && 'Salvando empresa…'}
+          {envio.etapa === 'sucesso' && 'Dados da empresa salvos com sucesso.'}
+        </div>
+        {envio.etapa === 'erro' && <p role="alert" className="text-sm text-erro">{envio.mensagem}</p>}
+      </form>
+      <ProdutosEmpresa estadoEmpresa={consulta.etapa} empresaId={dados.id} />
+    </>
   )
 }
 
@@ -114,9 +121,12 @@ export default function MinhaEmpresa() {
       <h1 className="text-3xl font-bold tracking-tight text-marinho sm:text-4xl">Minha empresa</h1>
       <p className="mt-3 text-sm text-suave">Modo demonstração — sem autenticação de usuários</p>
       {modo === 'http' ? <CadastroEmpresa /> : (
-        <p className="mt-6 rounded-xl border border-divisor bg-superficie p-5 text-suave">
-          O cadastro real exige a API do RadarLead. Ative o modo HTTP para consultar e salvar os dados da empresa.
-        </p>
+        <>
+          <p className="mt-6 rounded-xl border border-divisor bg-superficie p-5 text-suave">
+            O cadastro real exige a API do RadarLead. Ative o modo HTTP para consultar e salvar os dados da empresa.
+          </p>
+          <ProdutosEmpresa estadoEmpresa="simulado" />
+        </>
       )}
     </main>
   )
