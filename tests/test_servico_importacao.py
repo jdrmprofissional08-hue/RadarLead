@@ -11,6 +11,7 @@ class TestServicoImportacaoEmpresas(unittest.TestCase):
     def setUp(self):
         self.consulta = Mock()
         self.repositorio = Mock()
+        self.repositorio.listar_empresas.return_value = []
 
         def consultar(cnpj, classe_empresa=None):
             return SimpleNamespace(cnpj=cnpj)
@@ -69,6 +70,42 @@ class TestServicoImportacaoEmpresas(unittest.TestCase):
 
         self.assertEqual(len(resultado["falhas"]), 1)
         self.assertEqual(len(resultado["importados"]), 1)
+
+
+    def test_empresa_ja_cadastrada(self):
+        cnpj = "11111111000111"
+
+        self.repositorio.listar_empresas.return_value = [
+            SimpleNamespace(cnpj=cnpj)
+        ]
+
+        resultado = self.servico.importar_cnpjs([cnpj])
+
+        self.assertEqual(resultado["importados"], [])
+        self.assertEqual(resultado["ja_cadastrados"], [cnpj])
+
+        self.consulta.consultar_empresa.assert_not_called()
+        self.repositorio.salvar_empresa.assert_not_called()
+
+    def test_importa_apenas_empresa_nova(self):
+        existente = "11111111000111"
+        nova = "22222222000122"
+
+        self.repositorio.listar_empresas.return_value = [
+            SimpleNamespace(cnpj=existente)
+        ]
+
+        resultado = self.servico.importar_cnpjs([
+            existente,
+            nova
+        ])
+
+        self.assertEqual(resultado["ja_cadastrados"], [existente])
+        self.assertEqual(resultado["importados"], [nova])
+
+        self.assertEqual(
+            self.repositorio.salvar_empresa.call_count, 1
+        )
 
 
 if __name__ == "__main__":

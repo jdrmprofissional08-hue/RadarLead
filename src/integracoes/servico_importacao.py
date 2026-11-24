@@ -13,7 +13,14 @@ class ServicoImportacaoEmpresas:
         resultado = {
             "importados": [],
             "duplicados": [],
+            "ja_cadastrados": [],
             "falhas": []
+        }
+
+        # Consulta as empresas que ja estao no repositorio.
+        existentes = {
+            empresa.cnpj
+            for empresa in self.repositorio.listar_empresas()
         }
 
         vistos = set()
@@ -41,17 +48,24 @@ class ServicoImportacaoEmpresas:
                 })
                 continue
 
+            # Evita repeticoes dentro da lista recebida.
             if cnpj in vistos:
                 resultado["duplicados"].append(cnpj)
                 continue
 
             vistos.add(cnpj)
 
+            # Evita consultar empresas ja cadastradas.
+            if cnpj in existentes:
+                resultado["ja_cadastrados"].append(cnpj)
+                continue
+
             try:
                 empresa = self.consulta.consultar_empresa(
                     cnpj,
                     classe_empresa=classe_empresa
                 )
+
             except (ValueError, ConnectionError) as erro:
                 resultado["falhas"].append({
                     "cnpj": cnpj,
@@ -59,7 +73,10 @@ class ServicoImportacaoEmpresas:
                 })
                 continue
 
+            # Persiste a empresa e atualiza o conjunto local.
             self.repositorio.salvar_empresa(empresa)
+            existentes.add(cnpj)
+
             resultado["importados"].append(cnpj)
 
         return resultado
