@@ -53,6 +53,7 @@ export default function PerfilProspeccao() {
       </p>
       <FormularioPerfil
         onBuscar={buscar}
+        modo={modo}
         associacao={modo === 'http' ? associacao : null}
         onAlterar={invalidarBusca}
         buscando={busca.etapa === 'carregando'}
