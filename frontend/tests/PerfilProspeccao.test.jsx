@@ -85,6 +85,7 @@ describe('Página de prospecção', () => {
     expect(screen.getByText('Buscando empresas…')).toBeInTheDocument()
     const botao = screen.getByRole('button', { name: 'Buscar empresas' })
     expect(botao).toBeDisabled()
+    expect(botao).not.toHaveAccessibleDescription()
     expect(buscarEmpresasSimuladas).toHaveBeenCalledExactlyOnceWith({
       nome: 'Meu perfil', cnaes_desejados: ['6204000'], porte_desejado: 3,
       municipio_alvo_ibge: '5208707', peso_cnae: 50, peso_porte: 25, peso_localizacao: 25,
@@ -94,7 +95,9 @@ describe('Página de prospecção', () => {
       resposta.resolve([{ id: 'demo', razao_social: 'Empresa Exemplo', pontuacao: 100 }])
     })
     const resultados = screen.getByRole('region', { name: 'Resultados da busca' })
-    expect(within(resultados).getByText('Empresa Exemplo')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: /Perfil de Prospecção/i })).toBeInTheDocument()
+    expect(within(resultados).getByRole('heading', { level: 2, name: 'Resultados da busca' })).toBeInTheDocument()
+    expect(within(resultados).getByRole('heading', { level: 3, name: 'Empresa Exemplo' })).toBeInTheDocument()
     expect(botao.closest('form').compareDocumentPosition(resultados) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy()
     expect(botao).toBeEnabled()
@@ -148,6 +151,9 @@ it('descarta a resposta HTTP antiga e apresenta os dados do lead atual', async (
   try {
     render(<PerfilProspeccao />)
     expect(screen.getByText(/Busca pela API do RadarLead/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Buscar empresas' })).toHaveAccessibleDescription(
+      /Ao buscar empresas, a API cadastra ou atualiza o perfil pelo nome informado/,
+    )
     preencherPerfil()
     buscar()
     preencher('Nome do perfil', 'Busca HTTP atual')

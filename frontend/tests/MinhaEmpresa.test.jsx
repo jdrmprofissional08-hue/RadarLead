@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import App from '../src/App.jsx'
@@ -40,7 +40,7 @@ afterEach(() => {
 it('abre Minha empresa pelo menu, mostra o aviso e consulta o cadastro existente', async () => {
   fetch.mockResolvedValueOnce(resposta(200, empresa))
   render(<MemoryRouter><App /></MemoryRouter>)
-  fireEvent.click(screen.getByRole('link', { name: 'Minha empresa' }))
+  fireEvent.click(within(screen.getByRole('navigation', { name: 'Menu principal' })).getByRole('link', { name: 'Minha empresa' }))
   expect(screen.getByRole('heading', { name: 'Minha empresa' })).toBeInTheDocument()
   expect(screen.getByText('Modo demonstração — sem autenticação de usuários')).toBeInTheDocument()
   expect(await screen.findByDisplayValue(empresa.nome)).toBeInTheDocument()

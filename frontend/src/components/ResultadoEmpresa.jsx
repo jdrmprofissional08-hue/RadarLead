@@ -20,9 +20,9 @@ export default function ResultadoEmpresa({ empresa }) {
   return (
     <article className="rounded-xl border border-divisor bg-superficie p-4 shadow-xs sm:p-5">
       <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1.5">
-        <h2 className="min-w-0 text-xl font-semibold wrap-break-word text-marinho">
+        <h3 className="min-w-0 text-xl font-semibold wrap-break-word text-marinho">
           {empresa.razao_social || 'Empresa sem nome informado'}
-        </h2>
+        </h3>
         <p className="max-w-full rounded-md bg-acao-suave px-3 py-1.5 text-sm font-semibold wrap-break-word text-acao">
           Pontuação: {pontuacao}
         </p>
@@ -49,7 +49,7 @@ export default function ResultadoEmpresa({ empresa }) {
         </div>
       </dl>
 
-      <h3 className="mt-3 text-sm font-semibold">Justificativas</h3>
+      <h4 className="mt-3 text-sm font-semibold">Justificativas</h4>
       {empresa.justificativas?.length > 0 ? (
         <ul className="mt-1 list-disc pl-5 text-sm leading-5 text-suave">
           {empresa.justificativas.map((justificativa, indice) => (

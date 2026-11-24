@@ -13,9 +13,12 @@ it('ordena por pontos, mantém empates e exibe zero e os três portes', () => {
 
   render(<ListaResultados resultados={resultados} />)
   const cartoes = screen.getAllByRole('article')
-  expect(cartoes.map((cartao) => within(cartao).getByRole('heading', { level: 2 }).textContent))
+  expect(cartoes.map((cartao) => within(cartao).getByRole('heading', { level: 3 }).textContent))
     .toEqual(['Gama', 'Beta', 'Delta', 'Alfa'])
   expect(within(cartoes[0]).getByText('Demais')).toBeInTheDocument()
+  for (const cartao of cartoes) {
+    expect(within(cartao).getByRole('heading', { level: 4, name: 'Justificativas' })).toBeInTheDocument()
+  }
   expect(within(cartoes[0]).getByText('CNAE compatível')).toBeInTheDocument()
   expect(within(cartoes[1]).getByText('EPP')).toBeInTheDocument()
   expect(within(cartoes[3]).getByText('ME')).toBeInTheDocument()

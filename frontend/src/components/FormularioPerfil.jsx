@@ -198,8 +198,15 @@ export default function FormularioPerfil({ onBuscar, onAlterar, buscando, associ
         <ErroCampo campo="totalPesos" mensagem={erros.totalPesos} />
       </fieldset>
 
+      {modo === 'http' && (
+        <p id="aviso-gravacao-perfil" className="text-sm text-suave">
+          O perfil de cliente ideal descreve as empresas que você quer encontrar. Ao buscar empresas, a API cadastra
+          ou atualiza o perfil pelo nome informado.
+        </p>
+      )}
       <button
         type="submit"
+        aria-describedby={modo === 'http' ? 'aviso-gravacao-perfil' : undefined}
         disabled={buscando}
         className={`${estiloBotao} min-h-11 w-full bg-turquesa text-marinho hover:bg-turquesa/80 disabled:cursor-wait disabled:bg-acao-suave disabled:text-acao sm:w-auto`}
       >
