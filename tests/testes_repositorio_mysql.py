@@ -16,8 +16,12 @@ from src.dominio.empresa import Empresa
 from src.dominio.lead import Lead, StatusLead
 from src.dominio.perfil import Perfil
 from src.dominio.prospeccao import Prospeccao, StatusProspeccao
+from src.dominio.empresa_usuaria import EmpresaUsuaria, Produto
 from src.excecoes import (
     DadosInvalidosError,
+    DuplicadoError,
+    EmpresaUsuariaNaoEncontradaError,
+    ReferenciaInexistenteError,
     PerfilInvalidoError,
     PerfilNaoEncontradoError,
     PersistenciaError,
@@ -605,6 +609,103 @@ class TestRegrasDoEsquema(Base):
         self.repo.salvar_perfil(perfil("Igual"))
         with self.assertRaises(PerfilInvalidoError):
             self.repo.salvar_perfil(perfil("igual"))
+
+
+class TestEmpresaUsuariaEProdutosNoBanco(Base):
+    """Regras que só o banco impõe (duas empresas, chaves estrangeiras)."""
+
+    def setUp(self):
+        super().setUp()
+        self.minha = self.repo.salvar_empresa_usuaria_atual(
+            EmpresaUsuaria(nome="Minha", cnpj="11222333000181", email="minha@x.com"))
+        executar("INSERT INTO empresa_usuaria (nome, cnpj, email) "
+                 "VALUES ('Outra', '11444777000161', 'outra@x.com')")
+        self.outra_id = executar("SELECT id FROM empresa_usuaria WHERE nome = 'Outra'")[0][0]
+
+    def test_a_empresa_atual_e_a_de_menor_id_e_ignora_as_outras(self):
+        self.assertEqual(self.repo.empresa_usuaria_atual_id(), self.minha.id)
+
+    def test_cnpj_ou_email_de_outra_empresa_e_duplicado(self):
+        with self.assertRaises(DuplicadoError) as ctx:
+            self.repo.salvar_empresa_usuaria_atual(
+                EmpresaUsuaria(nome="X", cnpj="11444777000161", email="novo@x.com"))
+        self.assertIn("CNPJ", str(ctx.exception))
+        with self.assertRaises(DuplicadoError) as ctx:
+            self.repo.salvar_empresa_usuaria_atual(
+                EmpresaUsuaria(nome="X", cnpj="11222333000181", email="OUTRA@x.com"))
+        self.assertIn("e-mail", str(ctx.exception))
+        # nada mudou
+        self.assertEqual(self.repo.buscar_empresa_usuaria_atual().nome, "Minha")
+
+    def test_empresa_configurada_define_a_atual(self):
+        repo = RepositorioMySQL(apoio_mysql.gerenciador(), empresa_usuaria_id=self.outra_id)
+        self.assertEqual(repo.empresa_usuaria_atual_id(), self.outra_id)
+        self.assertEqual(repo.buscar_empresa_usuaria_atual().nome, "Outra")
+        self.assertEqual(repo.salvar_perfil(perfil()).empresa_usuaria_id, self.outra_id)
+
+    def test_empresa_configurada_inexistente(self):
+        repo = RepositorioMySQL(apoio_mysql.gerenciador(), empresa_usuaria_id=999)
+        with self.assertRaises(EmpresaUsuariaNaoEncontradaError):
+            repo.buscar_empresa_usuaria_atual()
+        with self.assertRaises(EmpresaUsuariaNaoEncontradaError):
+            repo.salvar_empresa_usuaria_atual(
+                EmpresaUsuaria(nome="X", cnpj="11222333000181", email="a@x.com"))
+
+    def test_produto_de_outra_empresa_nao_pode_ser_usado_no_perfil(self):
+        executar("INSERT INTO produto (empresa_usuaria_id, nome) VALUES (%s, 'Alheio')",
+                 (self.outra_id,))
+        produto_id = executar("SELECT id FROM produto")[0][0]
+        with self.assertRaises(DadosInvalidosError):
+            self.repo.salvar_perfil(perfil(produto_id=produto_id))
+        self.assertEqual(contar("perfil_cliente_ideal"), 0)
+
+    def test_mesmo_nome_de_produto_em_empresas_diferentes_e_permitido(self):
+        self.repo.salvar_produto(Produto(nome="Suporte", empresa_usuaria_id=self.minha.id))
+        self.repo.salvar_produto(Produto(nome="Suporte", empresa_usuaria_id=self.outra_id))
+        self.assertEqual(contar("produto"), 2)
+
+    def test_regra_do_esquema_impede_produto_de_outra_empresa_no_perfil(self):
+        executar("INSERT INTO produto (empresa_usuaria_id, nome) VALUES (%s, 'Alheio')",
+                 (self.outra_id,))
+        with self.erro_mysql(1452):
+            executar("INSERT INTO perfil_cliente_ideal (empresa_usuaria_id, produto_id, nome,"
+                     " porte_desejado, peso_segmento, peso_porte, peso_localizacao)"
+                     " VALUES (%s, 1, 'P', 3, 50, 25, 25)", (self.minha.id,))
+
+    def test_falha_ao_salvar_perfil_com_produto_desfaz_tudo(self):
+        produto = self.repo.salvar_produto(Produto(nome="X", empresa_usuaria_id=self.minha.id))
+        with self.assertRaises(PersistenciaError):
+            self.repo.salvar_perfil(perfil(produto_id=produto.id, cnaes_desejados=["9999998"]))
+        self.assertEqual(contar("perfil_cliente_ideal"), 0)
+        self.assertEqual(contar("perfil_cnae"), 0)
+
+    def test_produto_apagado_com_perfil_associado_e_recusado_pelo_banco(self):
+        produto = self.repo.salvar_produto(Produto(nome="X", empresa_usuaria_id=self.minha.id))
+        self.repo.salvar_perfil(perfil(produto_id=produto.id))
+        with self.erro_mysql(1451):
+            executar("DELETE FROM produto WHERE id = %s", (produto.id,))
+
+
+class TestCatalogoAusente(Base):
+    """Código válido que falta no banco não é falha do banco."""
+
+    def test_cnae_e_municipio_ausentes_sao_referencia_inexistente(self):
+        with self.assertRaises(ReferenciaInexistenteError) as ctx:
+            self.repo.salvar_perfil(perfil(cnaes_desejados=["9999998"]))
+        self.assertIn("9999998", str(ctx.exception))
+        with self.assertRaises(ReferenciaInexistenteError) as ctx:
+            self.repo.salvar_perfil(perfil(municipio_alvo_ibge="1100015"))
+        self.assertIn("1100015", str(ctx.exception))
+        self.assertEqual(contar("perfil_cliente_ideal"), 0)
+
+    def test_continua_sendo_persistencia_error_para_quem_ja_capturava(self):
+        self.assertTrue(issubclass(ReferenciaInexistenteError, PersistenciaError))
+
+    def test_falha_real_de_conexao_nao_vira_referencia_inexistente(self):
+        repo = RepositorioMySQL(GerenciadorConexaoMySQL(port=1, connect_timeout=2))
+        with self.assertRaises(PersistenciaError) as ctx:
+            repo.listar_perfis()
+        self.assertNotIsInstance(ctx.exception, ReferenciaInexistenteError)
 
 
 class TestFalhasDeConexao(unittest.TestCase):

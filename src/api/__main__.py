@@ -7,6 +7,7 @@ Opções:
 Variáveis de ambiente (todas opcionais):
     RADARLEAD_MYSQL_URL        mysql://usuario:senha@localhost:3306/radarlead
                                (sem ela, os dados ficam em memória e somem ao parar)
+    RADARLEAD_EMPRESA_USUARIA_ID  id da empresa usuária "atual" (padrão: a primeira do banco)
     RADARLEAD_CORS_ORIGENS     origens liberadas, separadas por vírgula
                                (padrão: http://localhost:5173,http://127.0.0.1:5173)
     RADARLEAD_FORNECEDOR_LAT / RADARLEAD_FORNECEDOR_LON / RADARLEAD_RAIO_KM
@@ -22,7 +23,7 @@ import sys
 from src.api.app import ORIGENS_PADRAO, criar_app
 from src.api.dados_exemplo import empresas_de_exemplo
 from src.api.recomendador_projeto import Fornecedor, RecomendadorDoProjeto
-from src.excecoes import RadarLeadError
+from src.excecoes import PersistenciaError, RadarLeadError
 
 
 def montar_repositorio(ambiente=None):
@@ -32,7 +33,14 @@ def montar_repositorio(ambiente=None):
         from src.persistencia.conexao_mysql import GerenciadorConexaoMySQL
         from src.persistencia.repositorio_mysql import RepositorioMySQL
 
-        return RepositorioMySQL(GerenciadorConexaoMySQL(url))
+        empresa = ambiente.get("RADARLEAD_EMPRESA_USUARIA_ID")
+        try:
+            empresa_id = int(empresa) if empresa else None
+        except ValueError:
+            raise PersistenciaError(
+                f"RADARLEAD_EMPRESA_USUARIA_ID deve ser um número inteiro, recebido: {empresa!r}"
+            )
+        return RepositorioMySQL(GerenciadorConexaoMySQL(url), empresa_usuaria_id=empresa_id)
 
     from src.persistencia.repositorio_memoria import RepositorioMemoria
 

@@ -31,6 +31,7 @@ class Perfil:
     capital_minimo: float = 0
     empresa_usuaria_id: Optional[int] = None
     id: Optional[int] = None
+    produto_id: Optional[int] = None
 
     def __post_init__(self):
         try:
@@ -55,6 +56,10 @@ class Perfil:
             self.municipio_alvo_ibge = validacao.normalizar_ibge(
                 self.municipio_alvo_ibge
             )
+            if self.produto_id is not None:
+                self.produto_id = validacao.validar_inteiro(
+                    self.produto_id, "Produto do perfil"
+                )
             self._validar_pesos()
             self._validar_capital_minimo()
             # 50.0 vira 50: o recomendador exige pesos inteiros, e o banco
@@ -118,6 +123,7 @@ class Perfil:
             "peso_localizacao": self.peso_localizacao,
             "capital_minimo": self.capital_minimo,
             "empresa_usuaria_id": self.empresa_usuaria_id,
+            "produto_id": self.produto_id,
         }
 
     @classmethod
@@ -154,4 +160,5 @@ class Perfil:
             capital_minimo=dados.get("capital_minimo", 0),
             empresa_usuaria_id=dados.get("empresa_usuaria_id"),
             id=perfil_id,
+            produto_id=dados.get("produto_id"),
         )

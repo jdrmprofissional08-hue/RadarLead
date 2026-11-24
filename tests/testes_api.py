@@ -6,8 +6,9 @@ from src.api.app import criar_app
 from src.api.dados_exemplo import empresas_de_exemplo
 from src.api.recomendador_projeto import Fornecedor, RecomendadorDoProjeto
 from src.dominio.empresa import Empresa
-from src.excecoes import PersistenciaError, RecomendadorError
+from src.excecoes import PersistenciaError, RecomendadorError, ReferenciaInexistenteError
 from src.persistencia.repositorio_memoria import RepositorioMemoria
+from src.dominio.empresa_usuaria import EmpresaUsuaria
 
 PEDIDO = {
     "nome": "TI em Goiânia",
@@ -27,6 +28,13 @@ class RecomendadorFalso:
     def __init__(self, erro=None):
         self.erro = erro
         self.chamadas = []
+
+    def com_origem(self, latitude, longitude, raio_km=None):
+        copia = RecomendadorFalso(self.erro)
+        copia.origem = (latitude, longitude, raio_km)
+        copia.chamadas = self.chamadas
+        copia.fornecedor = type("F", (), {"raio_km": 350.0 if raio_km is None else raio_km})()
+        return copia
 
     def recomendar(self, empresas, perfil):
         self.chamadas.append((empresas, perfil))
@@ -192,10 +200,18 @@ class TestFalhas(Base):
         resposta = self.prospectar()
         self.assertErro(resposta, 503, "banco_indisponivel")
 
+    def test_codigo_valido_ausente_do_catalogo_nao_e_503(self):
+        def faltar(*_):
+            raise ReferenciaInexistenteError("Município inexistente(s) no cadastro: 5208707")
+        self.repo.salvar_perfil = faltar
+        resposta = self.prospectar()
+        self.assertErro(resposta, 422, "referencia_inexistente")
+        self.assertIn("5208707", resposta.get_json()["erro"]["mensagem"])
+
     def test_erro_inesperado_nao_vaza_detalhes(self):
         def quebrar(*_):
             raise KeyError("segredo-interno")
-        self.repo.listar_perfis = quebrar
+        self.repo.empresa_usuaria_atual_id = quebrar
         self.app.testing = False
         self.app.config["PROPAGATE_EXCEPTIONS"] = False
         with self.assertLogs(self.app.logger, "ERROR"):
@@ -213,7 +229,10 @@ class TestFalhas(Base):
 class TestConsultas(Base):
 
     def test_saude(self):
-        self.assertEqual(self.cliente.get("/api/saude").get_json(), {"status": "ok"})
+        corpo = self.cliente.get("/api/saude").get_json()
+        self.assertEqual(corpo["status"], "ok")
+        self.assertEqual(corpo["modo"], "demonstracao")
+        self.assertIs(corpo["empresa_usuaria_cadastrada"], False)
 
     def test_buscar_prospeccao_com_leads(self):
         criada = self.prospectar().get_json()
@@ -279,6 +298,270 @@ class TestCors(Base):
         self.assertEqual(r.headers["Access-Control-Allow-Origin"], "http://meu-front.local")
 
 
+EMPRESA = {"nome": "Minha Empresa", "cnpj": "11.222.333/0001-81", "email": "contato@minha.com"}
+
+
+class TestEmpresaUsuaria(Base):
+
+    def test_sem_cadastro_a_consulta_devolve_404(self):
+        self.assertErro(self.cliente.get("/api/empresa-usuaria"), 404, "nao_encontrado")
+
+    def test_put_cria_com_201_e_depois_atualiza_com_200(self):
+        criada = self.cliente.put("/api/empresa-usuaria", json=EMPRESA)
+        self.assertEqual(criada.status_code, 201)
+        self.assertEqual(criada.get_json(), {
+            "id": 1, "nome": "Minha Empresa", "cnpj": "11222333000181",
+            "email": "contato@minha.com"})
+
+        atualizada = self.cliente.put("/api/empresa-usuaria", json={**EMPRESA, "nome": "Novo Nome"})
+        self.assertEqual(atualizada.status_code, 200)
+        self.assertEqual(atualizada.get_json()["id"], 1)
+        self.assertEqual(self.cliente.get("/api/empresa-usuaria").get_json()["nome"], "Novo Nome")
+
+    def test_a_empresa_provisoria_dos_perfis_nao_conta_e_e_substituida(self):
+        perfil = self.prospectar().get_json()["perfil"]  # cria a empresa provisória
+        self.assertErro(self.cliente.get("/api/empresa-usuaria"), 404, "nao_encontrado")
+
+        r = self.cliente.put("/api/empresa-usuaria", json=EMPRESA)
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.get_json()["id"], perfil["empresa_usuaria_id"])
+        # o perfil continua visível: agora é da empresa real
+        self.assertEqual(len(self.cliente.get("/api/perfis").get_json()["perfis"]), 1)
+
+    def test_validacao(self):
+        casos = {
+            "cnpj com digito errado": {"cnpj": "11222333000182"},
+            "cnpj repetido": {"cnpj": "00000000000000"},
+            "cnpj curto": {"cnpj": "123"},
+            "email invalido": {"email": "sem-arroba"},
+            "nome vazio": {"nome": "  "},
+            "cnpj numero": {"cnpj": True},
+        }
+        for nome, mudanca in casos.items():
+            with self.subTest(nome):
+                r = self.cliente.put("/api/empresa-usuaria", json={**EMPRESA, **mudanca})
+                self.assertErro(r, 400, "dados_invalidos")
+        self.assertErro(self.cliente.get("/api/empresa-usuaria"), 404, "nao_encontrado")
+
+    def test_campos_ausentes(self):
+        for campo in ("nome", "cnpj", "email"):
+            corpo = {k: v for k, v in EMPRESA.items() if k != campo}
+            r = self.cliente.put("/api/empresa-usuaria", json=corpo)
+            self.assertErro(r, 400, "dados_invalidos")
+            self.assertIn(campo, r.get_json()["erro"]["mensagem"])
+
+    def test_corpo_que_nao_e_json(self):
+        r = self.cliente.put("/api/empresa-usuaria", data=b"x", content_type="application/json")
+        self.assertErro(r, 400, "json_invalido")
+
+    def test_cnpj_ou_email_de_outra_empresa_da_409(self):
+        self.cliente.put("/api/empresa-usuaria", json=EMPRESA)
+        # uma segunda empresa só existe por fora da API (modo demonstração)
+        outra = self.repo._proximo_id_empresa_usuaria
+        self.repo._empresas_usuarias[outra] = EmpresaUsuaria(
+            id=outra, nome="Outra", cnpj="11444777000161", email="outra@x.com")
+        # a "atual" é sempre a de menor id: continua sendo a primeira
+        r = self.cliente.put("/api/empresa-usuaria", json={**EMPRESA, "cnpj": "11444777000161"})
+        self.assertErro(r, 409, "duplicado")
+        r = self.cliente.put("/api/empresa-usuaria", json={**EMPRESA, "email": "OUTRA@x.com"})
+        self.assertErro(r, 409, "duplicado")
+
+
+class TestProdutos(Base):
+
+    def setUp(self):
+        super().setUp()
+        self.cliente.put("/api/empresa-usuaria", json=EMPRESA)
+
+    def criar(self, **extra):
+        return self.cliente.post("/api/produtos", json={"nome": "Consultoria", **extra})
+
+    def test_cria_lista_e_busca(self):
+        r = self.criar(descricao="  Horas de consultoria ")
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.get_json(), {"id": 1, "empresa_usuaria_id": 1,
+                                        "nome": "Consultoria", "descricao": "Horas de consultoria"})
+        self.assertEqual(self.criar(nome="Suporte").get_json()["descricao"], None)
+
+        lista = self.cliente.get("/api/produtos").get_json()["produtos"]
+        self.assertEqual([p["nome"] for p in lista], ["Consultoria", "Suporte"])
+        self.assertEqual(self.cliente.get("/api/produtos/2").get_json()["nome"], "Suporte")
+
+    def test_nome_repetido_ignora_caixa_e_acento(self):
+        self.criar(nome="Consultoria")
+        self.assertErro(self.criar(nome=" consultória "), 409, "duplicado")
+
+    def test_validacao(self):
+        self.assertErro(self.criar(nome=""), 400, "dados_invalidos")
+        self.assertErro(self.criar(nome=5), 400, "dados_invalidos")
+        self.assertErro(self.criar(descricao=7), 400, "dados_invalidos")
+        r = self.cliente.post("/api/produtos", json={})
+        self.assertErro(r, 400, "dados_invalidos")
+        self.assertIn("nome", r.get_json()["erro"]["mensagem"])
+
+    def test_produto_inexistente(self):
+        self.assertErro(self.cliente.get("/api/produtos/99"), 404, "nao_encontrado")
+
+    def test_sem_empresa_cadastrada_as_rotas_de_produto_dao_404(self):
+        cliente = criar_app(RepositorioMemoria(), RecomendadorFalso()).test_client()
+        self.assertErro(cliente.get("/api/produtos"), 404, "nao_encontrado")
+        self.assertErro(cliente.post("/api/produtos", json={"nome": "x"}), 404, "nao_encontrado")
+
+    def test_produto_de_outra_empresa_nao_aparece(self):
+        self.criar()
+        self.repo._proximo_id_empresa_usuaria = 5
+        self.repo._empresas_usuarias[5] = EmpresaUsuaria(
+            id=5, nome="Outra", cnpj="11444777000161", email="outra@x.com")
+        from src.dominio.empresa_usuaria import Produto
+        self.repo.salvar_produto(Produto(nome="Segredo", empresa_usuaria_id=5))
+        nomes = [p["nome"] for p in self.cliente.get("/api/produtos").get_json()["produtos"]]
+        self.assertEqual(nomes, ["Consultoria"])
+        self.assertErro(self.cliente.get("/api/produtos/2"), 404, "nao_encontrado")
+
+
+class TestProdutoNoPerfil(Base):
+
+    def setUp(self):
+        super().setUp()
+        self.cliente.put("/api/empresa-usuaria", json=EMPRESA)
+        self.cliente.post("/api/produtos", json={"nome": "A"})
+        self.cliente.post("/api/produtos", json={"nome": "B"})
+
+    def test_sem_produto_o_contrato_antigo_continua_igual(self):
+        corpo = self.prospectar().get_json()
+        self.assertIsNone(corpo["perfil"]["produto_id"])
+
+    def test_associa_na_criacao_e_aparece_nas_consultas(self):
+        corpo = self.prospectar(produto_id=1).get_json()
+        self.assertEqual(corpo["perfil"]["produto_id"], 1)
+        self.assertEqual(self.cliente.get("/api/perfis").get_json()["perfis"][0]["produto_id"], 1)
+        lida = self.cliente.get(f"/api/prospeccoes/{corpo['id']}").get_json()
+        self.assertEqual(lida["perfil"]["produto_id"], 1)
+
+    def test_ausente_preserva_numero_troca_e_null_remove(self):
+        self.prospectar(produto_id=1)
+        self.assertEqual(self.prospectar().get_json()["perfil"]["produto_id"], 1)
+        self.assertEqual(self.prospectar(produto_id=2).get_json()["perfil"]["produto_id"], 2)
+        self.assertIsNone(self.prospectar(produto_id=None).get_json()["perfil"]["produto_id"])
+        self.assertEqual(len(self.cliente.get("/api/perfis").get_json()["perfis"]), 1)
+
+    def test_produto_invalido_da_400_e_nao_altera_o_perfil(self):
+        self.prospectar(produto_id=1)
+        for valor in (99, "1", 1.5, True, [1]):
+            with self.subTest(valor):
+                self.assertErro(self.prospectar(produto_id=valor), 400, "dados_invalidos")
+        self.assertEqual(self.cliente.get("/api/perfis").get_json()["perfis"][0]["produto_id"], 1)
+
+    def test_produto_exige_empresa_cadastrada(self):
+        cliente = criar_app(RepositorioMemoria(), RecomendadorFalso()).test_client()
+        r = cliente.post("/api/prospeccoes", json={**PEDIDO, "produto_id": 1})
+        self.assertErro(r, 400, "dados_invalidos")
+        self.assertIn("empresa", r.get_json()["erro"]["mensagem"].lower())
+
+    def test_nome_com_outra_grafia_e_o_mesmo_perfil(self):
+        self.prospectar(produto_id=1)
+        self.prospectar(nome="TI EM GOIANIA", produto_id=2)
+        perfis = self.cliente.get("/api/perfis").get_json()["perfis"]
+        self.assertEqual(len(perfis), 1)
+        self.assertEqual(perfis[0]["produto_id"], 2)
+
+
+class TestIsolamentoPorEmpresa(Base):
+
+    def test_perfis_e_prospeccoes_de_outra_empresa_nao_aparecem(self):
+        self.cliente.put("/api/empresa-usuaria", json=EMPRESA)
+        meu = self.prospectar().get_json()
+
+        # perfil e prospecção que pertencem a outra empresa (criados por fora da API)
+        self.repo._empresas_usuarias[9] = EmpresaUsuaria(
+            id=9, nome="Outra", cnpj="11444777000161", email="outra@x.com")
+        from src.dominio.perfil import Perfil
+        alheio = self.repo.salvar_perfil(Perfil(
+            nome="Alheio", cnaes_desejados=["6204000"], porte_desejado=3,
+            municipio_alvo_ibge="5208707", empresa_usuaria_id=9))
+        from src.servicos.servico_prospeccao import ServicoProspeccao
+        pro = ServicoProspeccao(self.repo, self.recomendador).executar(alheio.id)
+
+        nomes = [p["nome"] for p in self.cliente.get("/api/perfis").get_json()["perfis"]]
+        self.assertEqual(nomes, ["TI em Goiânia"])
+        todas = self.cliente.get("/api/prospeccoes").get_json()["prospeccoes"]
+        self.assertEqual([p["id"] for p in todas], [meu["id"]])
+        self.assertEqual(
+            self.cliente.get(f"/api/prospeccoes?perfil_id={alheio.id}").get_json(),
+            {"prospeccoes": []})
+        self.assertErro(self.cliente.get(f"/api/prospeccoes/{pro.id}"), 404, "nao_encontrado")
+
+    def test_mesmo_nome_de_perfil_de_outra_empresa_nao_e_atualizado(self):
+        self.cliente.put("/api/empresa-usuaria", json=EMPRESA)
+        self.repo._empresas_usuarias[9] = EmpresaUsuaria(
+            id=9, nome="Outra", cnpj="11444777000161", email="outra@x.com")
+        from src.dominio.perfil import Perfil
+        alheio = self.repo.salvar_perfil(Perfil(
+            nome="TI em Goiânia", cnaes_desejados=["1111111"], porte_desejado=1,
+            municipio_alvo_ibge="5205109", empresa_usuaria_id=9))
+
+        self.prospectar()
+        intacto = self.repo.buscar_perfil(alheio.id)
+        self.assertEqual((intacto.cnaes_desejados, intacto.porte_desejado), (["1111111"], 1))
+        self.assertEqual(len(self.repo.listar_perfis()), 2)
+
+
+class TestOrigem(Base):
+
+    def test_origem_vale_para_a_execucao_e_volta_na_resposta(self):
+        r = self.prospectar(origem={"latitude": -10.5, "longitude": -48, "raio_km": 120})
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.get_json()["origem"],
+                         {"latitude": -10.5, "longitude": -48, "raio_km": 120})
+        self.assertEqual(len(self.recomendador.chamadas), 1)
+        # não fica no histórico
+        lida = self.cliente.get(f"/api/prospeccoes/{r.get_json()['id']}").get_json()
+        self.assertNotIn("origem", lida)
+
+    def test_sem_raio_vale_o_do_servidor(self):
+        r = self.prospectar(origem={"latitude": 0, "longitude": 0})
+        self.assertEqual(r.get_json()["origem"]["raio_km"], 350.0)
+
+    def test_sem_origem_nada_muda(self):
+        self.assertNotIn("origem", self.prospectar().get_json())
+
+    def test_validacao(self):
+        casos = {
+            "latitude alta": {"latitude": 91, "longitude": 0},
+            "latitude baixa": {"latitude": -90.1, "longitude": 0},
+            "longitude alta": {"latitude": 0, "longitude": 180.5},
+            "raio zero": {"latitude": 0, "longitude": 0, "raio_km": 0},
+            "raio negativo": {"latitude": 0, "longitude": 0, "raio_km": -5},
+            "raio acima de 350": {"latitude": 0, "longitude": 0, "raio_km": 350.1},
+            "latitude texto": {"latitude": "0", "longitude": 0},
+            "latitude bool": {"latitude": True, "longitude": 0},
+            "sem longitude": {"latitude": 0},
+            "origem texto": "Goiânia",
+            "origem lista": [1, 2],
+        }
+        for nome, origem in casos.items():
+            with self.subTest(nome):
+                self.assertErro(self.prospectar(origem=origem), 400, "dados_invalidos")
+        self.assertEqual(self.recomendador.chamadas, [])
+
+    def test_limites_sao_aceitos(self):
+        for origem in ({"latitude": 90, "longitude": 180, "raio_km": 350},
+                       {"latitude": -90, "longitude": -180, "raio_km": 0.1}):
+            with self.subTest(origem):
+                self.assertEqual(self.prospectar(origem=origem).status_code, 201)
+
+    def test_origem_nula_e_ignorada(self):
+        self.assertEqual(self.prospectar(origem=None).status_code, 201)
+
+    def test_recomendador_sem_suporte_a_origem(self):
+        class Simples:
+            def recomendar(self, empresas, perfil):
+                return []
+        cliente = criar_app(self.repo, Simples()).test_client()
+        r = cliente.post("/api/prospeccoes", json={**PEDIDO, "origem": {"latitude": 0, "longitude": 0}})
+        self.assertErro(r, 502, "falha_na_prospeccao")
+
+
 class TestPipelineDoJose(unittest.TestCase):
     """Roda de verdade o pipeline (src/Recomendadores); pulado se a pasta não existe."""
 
@@ -323,7 +606,24 @@ class TestPipelineDoJose(unittest.TestCase):
         outro = self.cliente.post("/api/prospeccoes", json={
             **PEDIDO, "nome": "Sem match", "cnaes_desejados": ["1111111"]}).get_json()
         self.assertEqual(outro["leads"], [])
-        self.assertEqual(outro["total_empresas_avaliadas"], 6)
+        self.assertEqual(outro["total_empresas_avaliadas"], 7)
+
+    def test_origem_da_requisicao_muda_quem_esta_ao_alcance(self):
+        perto_de_catalao = {"latitude": -18.166, "longitude": -47.944, "raio_km": 20}
+        corpo = self.cliente.post("/api/prospeccoes", json={
+            **PEDIDO, "nome": "Origem Catalão", "origem": perto_de_catalao}).get_json()
+        self.assertEqual([l["cnpj"] for l in corpo["leads"]], ["33333333000100"])
+        self.assertEqual(corpo["origem"]["raio_km"], 20)
+
+        longe = self.cliente.post("/api/prospeccoes", json={
+            **PEDIDO, "nome": "Origem Rio",
+            "origem": {"latitude": -22.9, "longitude": -43.2, "raio_km": 50}}).get_json()
+        self.assertEqual(longe["leads"], [])
+
+        # sem origem, volta ao ponto configurado no servidor
+        padrao = self.cliente.post("/api/prospeccoes", json=PEDIDO).get_json()
+        self.assertEqual(len(padrao["leads"]), 3)  # a sem coordenadas fica de fora
+        self.assertNotIn("origem", padrao)
 
 
 class TestRecomendadorDoProjeto(unittest.TestCase):

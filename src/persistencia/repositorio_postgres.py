@@ -114,12 +114,26 @@ class RepositorioPostgres(Repositorio):
     # =====================================================================
 
     def salvar_perfil(self, perfil: Perfil) -> Perfil:
+        if perfil.produto_id is not None:
+            raise PersistenciaError(
+                "O repositório PostgreSQL não grava o produto do perfil "
+                "(use o MySQL, que é o banco do projeto)"
+            )
         with self._transacao() as cur:
             perfil_id, empresa_id = self._gravar_perfil(cur, perfil)
 
         perfil.id = perfil_id
         perfil.empresa_usuaria_id = empresa_id
         return perfil
+
+    def empresa_usuaria_atual_id(self):
+        """Empresa dona dos perfis (para a API filtrar por empresa)."""
+        with self._transacao() as cur:
+            if self._empresa_usuaria_id is not None:
+                return self._empresa_usuaria_id
+            cur.execute("SELECT id FROM empresa_usuaria ORDER BY id LIMIT 1")
+            linha = cur.fetchone()
+            return None if linha is None else linha[0]
 
     def buscar_perfil(self, perfil_id: int) -> Perfil:
         with self._transacao() as cur:

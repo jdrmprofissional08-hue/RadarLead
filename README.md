@@ -69,7 +69,7 @@ repo = RepositorioPostgres(GerenciadorConexao("host=localhost dbname=radarlead u
 python -m src.api --demo        # http://127.0.0.1:8000, dados em memória + empresas fictícias
 ```
 
-Com MySQL: defina `RADARLEAD_MYSQL_URL` antes (ex.: `$env:RADARLEAD_MYSQL_URL = "mysql://root:senha@localhost:3306/radarlead"`). Rota principal: `POST /api/prospeccoes` (perfil completo -> leads). Contrato, erros, CORS e variáveis de ambiente em [`docs/contrato_api.md`](docs/contrato_api.md). A prospecção usa o pipeline de `src/Recomendadores` (precisa estar no repositório).
+Com MySQL: defina `RADARLEAD_MYSQL_URL` antes (ex.: `$env:RADARLEAD_MYSQL_URL = "mysql://root:senha@localhost:3306/radarlead"`). Rota principal: `POST /api/prospeccoes` (perfil completo -> leads). Também há empresa usuária (`/api/empresa-usuaria`) e produtos (`/api/produtos`), em modo demonstração (uma empresa só, sem login). Contrato, erros, CORS e variáveis de ambiente em [`docs/contrato_api.md`](docs/contrato_api.md). A prospecção usa o pipeline de `src/Recomendadores` (precisa estar no repositório).
 
 ## Testes
 

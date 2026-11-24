@@ -7,6 +7,7 @@ exceção específica do projeto (ver src/excecoes.py).
 
 import math
 import re
+import unicodedata
 from datetime import date, datetime
 
 _SEPARADORES = re.compile(r"[.\-/\s]")
@@ -46,6 +47,45 @@ def normalizar_cnpj(valor) -> str:
         raise ValueError(f"CNPJ deve ter 14 dígitos, recebido: {valor!r}")
 
     return texto
+
+
+def cnpj_tem_digitos_validos(cnpj: str) -> bool:
+    """Confere os dois dígitos verificadores (módulo 11) de um CNPJ de 14 dígitos.
+
+    É a mesma regra do trigger do banco (sql/mysql/schema.sql). Sequências
+    como 00000000000000 ou 11111111111111 são recusadas.
+    """
+    if len(cnpj) != 14 or not cnpj.isdigit() or len(set(cnpj)) == 1:
+        return False
+
+    def digito(base: str, pesos: list[int]) -> int:
+        resto = sum(int(d) * p for d, p in zip(base, pesos)) % 11
+        return 0 if resto < 2 else 11 - resto
+
+    primeiro = digito(cnpj[:12], [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+    segundo = digito(cnpj[:13], [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+    return cnpj[12:] == f"{primeiro}{segundo}"
+
+
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def validar_email(valor) -> str:
+    """E-mail em formato simples (texto@dominio.ext), até 254 caracteres."""
+    texto = validar_texto(valor, "E-mail")
+    if len(texto) > 254 or not _EMAIL.match(texto):
+        raise ValueError(f"E-mail em formato inválido: {valor!r}")
+    return texto
+
+
+def chave_de_nome(texto: str) -> str:
+    """Forma de comparar nomes: sem espaços nas pontas, sem acentos, sem maiúsculas.
+
+    É a mesma ideia da comparação do MySQL (que ignora acentos e maiúsculas),
+    para que o repositório em memória e o banco concordem sobre "mesmo nome".
+    """
+    base = unicodedata.normalize("NFD", texto.strip())
+    return "".join(c for c in base if not unicodedata.combining(c)).casefold()
 
 
 def normalizar_ibge(valor) -> str:

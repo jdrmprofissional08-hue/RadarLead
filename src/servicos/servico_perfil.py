@@ -23,6 +23,7 @@ class ServicoPerfil:
         capital_minimo: float = 0,
         empresa_usuaria_id: Optional[int] = None,
         peso_cnae: Optional[float] = None,
+        produto_id: Optional[int] = None,
     ) -> Perfil:
         """Valida os dados, cria o perfil e o salva.
 
@@ -44,6 +45,7 @@ class ServicoPerfil:
             peso_localizacao=peso_localizacao,
             capital_minimo=capital_minimo,
             empresa_usuaria_id=empresa_usuaria_id,
+            produto_id=produto_id,
         )
         return self._repositorio.salvar_perfil(perfil)
 

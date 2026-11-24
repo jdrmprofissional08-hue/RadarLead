@@ -25,6 +25,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from src.dominio.empresa import Empresa
+from src.dominio.empresa_usuaria import EmpresaUsuaria, Produto
 from src.dominio.perfil import Perfil
 from src.dominio.prospeccao import Prospeccao
 from src.excecoes import DadosInvalidosError, PersistenciaError
@@ -59,6 +60,24 @@ class RepositorioJson(RepositorioMemoria):
         base = super()
         return self._persistindo(lambda: base.salvar_empresas(empresas))
 
+    def salvar_empresa_usuaria_atual(self, empresa: EmpresaUsuaria) -> EmpresaUsuaria:
+        id_antes = empresa.id
+        base = super()
+        try:
+            return self._persistindo(lambda: base.salvar_empresa_usuaria_atual(empresa))
+        except Exception:
+            empresa.id = id_antes
+            raise
+
+    def salvar_produto(self, produto: Produto) -> Produto:
+        id_antes = produto.id
+        base = super()
+        try:
+            return self._persistindo(lambda: base.salvar_produto(produto))
+        except Exception:
+            produto.id = id_antes
+            raise
+
     def salvar_prospeccao(self, prospeccao: Prospeccao) -> Prospeccao:
         id_antes = prospeccao.id
         base = super()
@@ -86,6 +105,10 @@ class RepositorioJson(RepositorioMemoria):
             deepcopy(self._prospeccoes),
             self._proximo_id_perfil,
             self._proximo_id_prospeccao,
+            deepcopy(self._empresas_usuarias),
+            deepcopy(self._produtos),
+            self._proximo_id_empresa_usuaria,
+            self._proximo_id_produto,
         )
 
     def _restaurar_estado(self, estado):
@@ -95,6 +118,10 @@ class RepositorioJson(RepositorioMemoria):
             self._prospeccoes,
             self._proximo_id_perfil,
             self._proximo_id_prospeccao,
+            self._empresas_usuarias,
+            self._produtos,
+            self._proximo_id_empresa_usuaria,
+            self._proximo_id_produto,
         ) = estado
 
     # --- Gravação -------------------------------------------------------
@@ -107,6 +134,10 @@ class RepositorioJson(RepositorioMemoria):
             "perfis": [p.to_dict() for p in self._perfis.values()],
             "empresas": [e.to_dict() for e in self._empresas.values()],
             "prospeccoes": [p.to_dict() for p in self._prospeccoes.values()],
+            "proximo_id_empresa_usuaria": self._proximo_id_empresa_usuaria,
+            "proximo_id_produto": self._proximo_id_produto,
+            "empresas_usuarias": [e.to_dict() for e in self._empresas_usuarias.values()],
+            "produtos": [p.to_dict() for p in self._produtos.values()],
         }
         temporario = self._caminho.with_name(self._caminho.name + ".tmp")
 
@@ -195,6 +226,26 @@ class RepositorioJson(RepositorioMemoria):
                 )
             self._prospeccoes[prospeccao.id] = prospeccao
 
+        for item in self._lista(dados, "empresas_usuarias"):
+            empresa_usuaria = EmpresaUsuaria.from_dict(item)
+            if empresa_usuaria.id is None or empresa_usuaria.id in self._empresas_usuarias:
+                raise ValueError(
+                    f"empresa usuária com id ausente ou repetido: {empresa_usuaria.id!r}"
+                )
+            self._empresas_usuarias[empresa_usuaria.id] = empresa_usuaria
+
+        for item in self._lista(dados, "produtos"):
+            produto = Produto.from_dict(item)
+            if produto.id is None or produto.id in self._produtos:
+                raise ValueError(f"produto com id ausente ou repetido: {produto.id!r}")
+            self._produtos[produto.id] = produto
+
+        self._proximo_id_empresa_usuaria = self._proximo_id(
+            dados.get("proximo_id_empresa_usuaria"), self._empresas_usuarias
+        )
+        self._proximo_id_produto = self._proximo_id(
+            dados.get("proximo_id_produto"), self._produtos
+        )
         self._proximo_id_perfil = self._proximo_id(
             dados.get("proximo_id_perfil"), self._perfis
         )

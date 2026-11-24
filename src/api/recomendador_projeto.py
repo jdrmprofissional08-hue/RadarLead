@@ -36,6 +36,7 @@ from src.excecoes import RecomendadorError
 LATITUDE_PADRAO = -16.6799
 LONGITUDE_PADRAO = -49.2550
 RAIO_KM_PADRAO = 350.0
+RAIO_KM_MAXIMO = 350.0  # limite do pipeline do José
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,22 @@ class RecomendadorDoProjeto:
 
     def __init__(self, fornecedor: Fornecedor = None):
         self._fornecedor = fornecedor or Fornecedor()
+
+    @property
+    def fornecedor(self) -> Fornecedor:
+        return self._fornecedor
+
+    def com_origem(self, latitude: float, longitude: float,
+                   raio_km: float = None) -> "RecomendadorDoProjeto":
+        """Cópia com outro ponto de origem (e raio), só para uma execução.
+
+        Sem raio_km, vale o raio configurado no servidor.
+        """
+        return RecomendadorDoProjeto(Fornecedor(
+            latitude=latitude,
+            longitude=longitude,
+            raio_km=self._fornecedor.raio_km if raio_km is None else raio_km,
+        ))
 
     def recomendar(self, empresas: list, perfil: dict) -> list:
         try:

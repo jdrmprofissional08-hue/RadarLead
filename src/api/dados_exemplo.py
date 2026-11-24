@@ -15,6 +15,8 @@ _EMPRESAS = [
     ("44444444000100", "Delta Restaurante Demonstração Ltda", "5611201", 3, "5208707", "74020000", -16.6700, -49.2700, 2),
     ("55555555000100", "Épsilon Oficina Demonstração Ltda", "4520001", 1, "5205109", "75701000", -18.1500, -47.9300, 2),
     ("66666666000100", "Zeta Consultoria Demonstração Ltda", "6204000", 3, "5208707", "74030000", -16.6500, -49.2900, 8),
+    # ativa e com o CNAE certo, mas sem coordenadas: o filtro geográfico a descarta
+    ("77777777000100", "Eta Sem Coordenadas Demonstração Ltda", "6204000", 3, "5208707", "74040000", None, None, 2),
 ]
 
 MUNICIPIOS = {"5208707": ("Goiânia", "GO"), "5205109": ("Catalão", "GO")}

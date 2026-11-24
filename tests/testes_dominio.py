@@ -2,13 +2,17 @@ import unittest
 from datetime import datetime
 
 from src.dominio.empresa import Empresa
+from src.dominio.empresa_usuaria import EmpresaUsuaria, Produto
+from src.dominio import validacao
 from src.dominio.lead import Lead, StatusLead
 from src.dominio.perfil import Perfil
 from src.dominio.prospeccao import Prospeccao, StatusProspeccao
 from src.excecoes import (
     DadosInvalidosError,
     EmpresaInvalidaError,
+    EmpresaUsuariaInvalidaError,
     PerfilInvalidoError,
+    ProdutoInvalidoError,
 )
 
 
@@ -419,6 +423,99 @@ class TestPorteDoPerfil(unittest.TestCase):
             with self.subTest(porte):
                 with self.assertRaises(PerfilInvalidoError):
                     perfil_valido(porte_desejado=porte)
+
+
+class TestEmpresaUsuaria(unittest.TestCase):
+
+    def test_normaliza_e_valida(self):
+        e = EmpresaUsuaria(nome="  Minha  ", cnpj="11.222.333/0001-81", email=" a@b.co ")
+        self.assertEqual((e.nome, e.cnpj, e.email, e.id), ("Minha", "11222333000181", "a@b.co", None))
+
+    def test_dados_invalidos(self):
+        base = dict(nome="A", cnpj="11222333000181", email="a@b.co")
+        casos = {
+            "digito errado": {"cnpj": "11222333000182"},
+            "repetido": {"cnpj": "11111111111111"},
+            "curto": {"cnpj": "123"},
+            "letras": {"cnpj": "abc"},
+            "cnpj bool": {"cnpj": True},
+            "email sem arroba": {"email": "abc"},
+            "email sem ponto": {"email": "a@b"},
+            "email com espaco": {"email": "a b@c.com"},
+            "email enorme": {"email": "a@" + "b" * 260 + ".com"},
+            "nome vazio": {"nome": " "},
+            "id texto": {"id": "1"},
+        }
+        for nome, mudanca in casos.items():
+            with self.subTest(nome):
+                with self.assertRaises(EmpresaUsuariaInvalidaError):
+                    EmpresaUsuaria(**{**base, **mudanca})
+
+    def test_ida_e_volta(self):
+        e = EmpresaUsuaria(nome="A", cnpj="11222333000181", email="a@b.co", id=3)
+        self.assertEqual(EmpresaUsuaria.from_dict(e.to_dict()), e)
+        with self.assertRaises(EmpresaUsuariaInvalidaError):
+            EmpresaUsuaria.from_dict({"nome": "A"})
+
+    def test_digitos_verificadores_conhecidos(self):
+        for cnpj in ("11222333000181", "11444777000161", "12345678000195"):
+            self.assertTrue(validacao.cnpj_tem_digitos_validos(cnpj), cnpj)
+        for cnpj in ("11222333000180", "00000000000000", "1122233300018", "1122233300018a"):
+            self.assertFalse(validacao.cnpj_tem_digitos_validos(cnpj), cnpj)
+
+
+class TestProduto(unittest.TestCase):
+
+    def test_descricao_opcional_e_aparada(self):
+        self.assertIsNone(Produto(nome="A").descricao)
+        self.assertIsNone(Produto(nome="A", descricao="   ").descricao)
+        self.assertEqual(Produto(nome=" A ", descricao=" x ").to_dict(),
+                         {"id": None, "empresa_usuaria_id": None, "nome": "A", "descricao": "x"})
+
+    def test_dados_invalidos(self):
+        for nome, dados in {
+            "nome vazio": {"nome": ""}, "nome numero": {"nome": 1},
+            "descricao numero": {"nome": "A", "descricao": 3},
+            "empresa texto": {"nome": "A", "empresa_usuaria_id": "1"},
+            "id bool": {"nome": "A", "id": True},
+        }.items():
+            with self.subTest(nome):
+                with self.assertRaises(ProdutoInvalidoError):
+                    Produto(**dados)
+
+    def test_ida_e_volta(self):
+        p = Produto(nome="A", descricao="d", empresa_usuaria_id=1, id=2)
+        self.assertEqual(Produto.from_dict(p.to_dict()), p)
+
+
+class TestProdutoDoPerfil(unittest.TestCase):
+
+    def test_padrao_e_nulo_e_vai_para_o_dicionario(self):
+        perfil = perfil_valido()
+        self.assertIsNone(perfil.produto_id)
+        self.assertIsNone(perfil.to_dict()["produto_id"])
+        self.assertEqual(perfil_valido(produto_id=4).to_dict()["produto_id"], 4)
+
+    def test_ida_e_volta_e_arquivos_antigos_sem_o_campo(self):
+        perfil = perfil_valido(produto_id=4)
+        self.assertEqual(Perfil.from_dict(perfil.to_dict()).produto_id, 4)
+        antigo = perfil_valido().to_dict()
+        del antigo["produto_id"]
+        self.assertIsNone(Perfil.from_dict(antigo).produto_id)
+
+    def test_tipo_invalido(self):
+        for valor in ("1", 1.5, True, [1]):
+            with self.subTest(valor):
+                with self.assertRaises(PerfilInvalidoError):
+                    perfil_valido(produto_id=valor)
+
+
+class TestChaveDeNome(unittest.TestCase):
+
+    def test_ignora_caixa_acento_e_espacos_das_pontas(self):
+        self.assertEqual(validacao.chave_de_nome("  TI em Goiânia "),
+                         validacao.chave_de_nome("ti EM goiania"))
+        self.assertNotEqual(validacao.chave_de_nome("TI A"), validacao.chave_de_nome("TI B"))
 
 
 if __name__ == "__main__":

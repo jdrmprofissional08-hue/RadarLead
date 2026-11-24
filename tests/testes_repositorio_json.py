@@ -171,6 +171,36 @@ class TestPersistenciaEntreExecucoes(BaseJson):
         self.assertEqual(self.arquivos_temporarios(), [])
 
 
+class TestEmpresaUsuariaNoArquivo(BaseJson):
+
+    def test_empresa_e_produtos_sobrevivem_a_reabrir_o_arquivo(self):
+        from src.dominio.empresa_usuaria import EmpresaUsuaria, Produto
+        repo = self.abrir()
+        empresa = repo.salvar_empresa_usuaria_atual(
+            EmpresaUsuaria(nome="Minha", cnpj="11222333000181", email="a@b.co"))
+        produto = repo.salvar_produto(Produto(nome="X", descricao="d", empresa_usuaria_id=empresa.id))
+        repo.salvar_perfil(novo_perfil(produto_id=produto.id))
+
+        novo = self.abrir()
+        self.assertEqual(novo.buscar_empresa_usuaria_atual().cnpj, "11222333000181")
+        self.assertEqual(novo.buscar_produto(produto.id, empresa.id).descricao, "d")
+        self.assertEqual(novo.listar_perfis()[0].produto_id, produto.id)
+        # os ids continuam de onde pararam
+        outro = novo.salvar_produto(Produto(nome="Y", empresa_usuaria_id=empresa.id))
+        self.assertEqual(outro.id, produto.id + 1)
+
+    def test_falha_de_gravacao_desfaz_o_cadastro_da_empresa(self):
+        from unittest import mock
+        from src.dominio.empresa_usuaria import EmpresaUsuaria
+        repo = self.abrir()
+        empresa = EmpresaUsuaria(nome="Minha", cnpj="11222333000181", email="a@b.co")
+        with mock.patch.object(repo, "_gravar", side_effect=PersistenciaError("disco cheio")):
+            with self.assertRaises(PersistenciaError):
+                repo.salvar_empresa_usuaria_atual(empresa)
+        self.assertIsNone(empresa.id)
+        self.assertIsNone(repo.empresa_usuaria_atual_id())
+
+
 class TestArquivoInvalido(BaseJson):
 
     def test_json_corrompido_levanta_erro_e_nao_mexe_no_arquivo(self):

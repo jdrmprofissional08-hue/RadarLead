@@ -19,8 +19,11 @@ Empresa os traz, são gravados; se vier None, o banco recebe um MARCADOR de
 "não informado" (ver marcadores.py), nunca um valor que pareça real, e um dado
 já existente no banco não é apagado por um None. Motivo da situação não faz
 parte do domínio e recebe o código '00' (SEM MOTIVO) na primeira gravação.
-Empresa usuária do perfil quando não informada -> a "Empresa usuária padrão" de
-sql/mysql/seed_dominios.sql (criada na hora se não existir).
+Empresa usuária do perfil quando não informada -> a empresa "atual" (a configurada
+em empresa_usuaria_id ou a primeira do banco); se não houver nenhuma, a
+"Empresa usuária padrão" de sql/mysql/seed_dominios.sql (criada na hora). Essa
+empresa provisória não conta como cadastro: buscar_empresa_usuaria_atual a
+trata como "ainda não cadastrada", e o primeiro cadastro real a substitui.
 
 Diferenças em relação à memória/JSON, por limitação do esquema:
     - a ordem de cnaes_desejados e de cnaes_secundarios volta ordenada;
@@ -42,16 +45,21 @@ from typing import Optional, Sequence
 import pymysql
 
 from src.dominio.empresa import Empresa
+from src.dominio.empresa_usuaria import EmpresaUsuaria, Produto
 from src.dominio.lead import Lead, StatusLead
 from src.dominio.perfil import Perfil
 from src.dominio.prospeccao import Prospeccao, StatusProspeccao
 from src.excecoes import (
     DadosInvalidosError,
+    DuplicadoError,
     EmpresaNaoEncontradaError,
+    EmpresaUsuariaNaoEncontradaError,
     PerfilInvalidoError,
     PerfilNaoEncontradoError,
     PersistenciaError,
+    ProdutoNaoEncontradoError,
     ProspeccaoNaoEncontradaError,
+    ReferenciaInexistenteError,
 )
 from src.persistencia.conexao_mysql import GerenciadorConexaoMySQL
 from src.persistencia.marcadores import (
@@ -75,7 +83,7 @@ SEPARADOR_JUSTIFICATIVAS = "\n"
 
 _COLUNAS_PERFIL = (
     "id, empresa_usuaria_id, nome, porte_desejado, capital_minimo, "
-    "municipio_alvo_ibge, peso_segmento, peso_porte, peso_localizacao"
+    "municipio_alvo_ibge, peso_segmento, peso_porte, peso_localizacao, produto_id"
 )
 
 
@@ -107,7 +115,7 @@ def _exigir_existentes(cur, tabela: str, coluna: str, valores, descricao: str) -
     achados = {linha[0] for linha in cur.fetchall()}
     faltando = [v for v in unicos if v not in achados]
     if faltando:
-        raise PersistenciaError(
+        raise ReferenciaInexistenteError(
             f"{descricao} inexistente(s) no cadastro: {', '.join(map(str, faltando))}"
             f"{_DICA_DOMINIOS}"
         )
@@ -178,18 +186,19 @@ class RepositorioMySQL(Repositorio):
                            [perfil.municipio_alvo_ibge], "Município")
 
         if perfil.id is None:
-            empresa_id = (
+            dono = (
                 perfil.empresa_usuaria_id
                 or self._empresa_usuaria_id
-                or self._empresa_usuaria_padrao(cur)
+                or self._empresa_atual_ou_padrao(cur)
             )
+            self._exigir_produto(cur, perfil.produto_id, dono)
             cur.execute(
                 """INSERT INTO perfil_cliente_ideal
-                       (empresa_usuaria_id, nome, porte_desejado, capital_minimo,
-                        municipio_alvo_ibge, peso_segmento, peso_porte,
-                        peso_localizacao)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                (empresa_id, perfil.nome, perfil.porte_desejado,
+                       (empresa_usuaria_id, produto_id, nome, porte_desejado,
+                        capital_minimo, municipio_alvo_ibge, peso_segmento,
+                        peso_porte, peso_localizacao)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (dono, perfil.produto_id, perfil.nome, perfil.porte_desejado,
                  perfil.capital_minimo, perfil.municipio_alvo_ibge, *pesos),
             )
             perfil_id = cur.lastrowid
@@ -198,31 +207,29 @@ class RepositorioMySQL(Repositorio):
             # MySQL devolve 0 quando nada mudou), então a existência é checada
             # antes. empresa_usuaria_id em branco mantém o dono atual.
             cur.execute(
-                "SELECT id FROM perfil_cliente_ideal WHERE id = %s FOR UPDATE",
+                "SELECT empresa_usuaria_id FROM perfil_cliente_ideal "
+                "WHERE id = %s FOR UPDATE",
                 (perfil.id,),
             )
-            if cur.fetchone() is None:
+            linha = cur.fetchone()
+            if linha is None:
                 raise PerfilNaoEncontradoError(
                     f"Perfil {perfil.id} não existe e não pode ser atualizado"
                 )
+            dono = perfil.empresa_usuaria_id or linha[0]
+            self._exigir_produto(cur, perfil.produto_id, dono)
             cur.execute(
                 """UPDATE perfil_cliente_ideal
-                      SET empresa_usuaria_id = COALESCE(%s, empresa_usuaria_id),
+                      SET empresa_usuaria_id = %s, produto_id = %s,
                           nome = %s, porte_desejado = %s, capital_minimo = %s,
                           municipio_alvo_ibge = %s, peso_segmento = %s,
                           peso_porte = %s, peso_localizacao = %s
                     WHERE id = %s""",
-                (perfil.empresa_usuaria_id, perfil.nome, perfil.porte_desejado,
+                (dono, perfil.produto_id, perfil.nome, perfil.porte_desejado,
                  perfil.capital_minimo, perfil.municipio_alvo_ibge, *pesos,
                  perfil.id),
             )
             perfil_id = perfil.id
-
-        cur.execute(
-            "SELECT empresa_usuaria_id FROM perfil_cliente_ideal WHERE id = %s",
-            (perfil_id,),
-        )
-        empresa_id = cur.fetchone()[0]
 
         cur.execute("DELETE FROM perfil_cnae WHERE perfil_id = %s", (perfil_id,))
         if perfil.cnaes_desejados:
@@ -230,9 +237,34 @@ class RepositorioMySQL(Repositorio):
                 "INSERT INTO perfil_cnae (perfil_id, cnae) VALUES (%s, %s)",
                 [(perfil_id, cnae) for cnae in perfil.cnaes_desejados],
             )
-        return perfil_id, empresa_id
+        return perfil_id, dono
 
-    def _empresa_usuaria_padrao(self, cur) -> int:
+    @staticmethod
+    def _exigir_produto(cur, produto_id: Optional[int], empresa_id: int) -> None:
+        """O produto do perfil precisa existir e ser da mesma empresa do perfil."""
+        if produto_id is None:
+            return
+        cur.execute(
+            "SELECT id FROM produto WHERE id = %s AND empresa_usuaria_id = %s",
+            (produto_id, empresa_id),
+        )
+        if cur.fetchone() is None:
+            raise DadosInvalidosError(
+                f"Produto {produto_id} não existe para a empresa do perfil"
+            )
+
+    def _empresa_atual_id(self, cur) -> Optional[int]:
+        """Empresa atual: a configurada na criação ou a primeira do banco."""
+        if self._empresa_usuaria_id is not None:
+            return self._empresa_usuaria_id
+        cur.execute("SELECT id FROM empresa_usuaria ORDER BY id LIMIT 1")
+        linha = cur.fetchone()
+        return None if linha is None else linha[0]
+
+    def _empresa_atual_ou_padrao(self, cur) -> int:
+        atual = self._empresa_atual_id(cur)
+        if atual is not None:
+            return atual
         # "cnpj = cnpj" não altera nada: só evita erro se a linha já existir
         cur.execute(
             """INSERT INTO empresa_usuaria (nome, cnpj, email)
@@ -263,7 +295,7 @@ class RepositorioMySQL(Repositorio):
 
         perfis = []
         for (id_, empresa_id, nome, porte, capital, ibge,
-             p_seg, p_porte, p_loc) in linhas:
+             p_seg, p_porte, p_loc, produto_id) in linhas:
             try:
                 perfis.append(Perfil(
                     id=id_,
@@ -276,12 +308,139 @@ class RepositorioMySQL(Repositorio):
                     peso_porte=float(p_porte),
                     peso_localizacao=float(p_loc),
                     capital_minimo=float(capital),
+                    produto_id=produto_id,
                 ))
             except DadosInvalidosError as erro:
                 raise PersistenciaError(
                     f"Perfil {id_} do banco não cabe no domínio: {erro}"
                 ) from erro
         return perfis
+
+    # =====================================================================
+    # Empresa usuária e produtos
+    # =====================================================================
+
+    def empresa_usuaria_atual_id(self) -> Optional[int]:
+        with self._transacao() as cur:
+            return self._empresa_atual_id(cur)
+
+    def buscar_empresa_usuaria_atual(self) -> EmpresaUsuaria:
+        with self._transacao() as cur:
+            empresa_id = self._empresa_atual_id(cur)
+            linha = None
+            if empresa_id is not None:
+                cur.execute(
+                    "SELECT id, nome, cnpj, email FROM empresa_usuaria WHERE id = %s",
+                    (empresa_id,),
+                )
+                linha = cur.fetchone()
+
+        # a empresa provisória (criada para dar dono aos perfis) não é cadastro
+        if linha is None or linha[2] == EMPRESA_USUARIA_PADRAO_CNPJ:
+            raise EmpresaUsuariaNaoEncontradaError(
+                "A empresa usuária ainda não foi cadastrada"
+            )
+        try:
+            return EmpresaUsuaria(id=linha[0], nome=linha[1], cnpj=linha[2],
+                                  email=linha[3])
+        except DadosInvalidosError as erro:
+            raise PersistenciaError(
+                f"Empresa usuária {linha[0]} do banco não cabe no domínio: {erro}"
+            ) from erro
+
+    def salvar_empresa_usuaria_atual(self, empresa: EmpresaUsuaria) -> EmpresaUsuaria:
+        with self._transacao() as cur:
+            empresa_id = self._empresa_atual_id(cur)
+            if empresa_id is None:
+                cur.execute(
+                    "INSERT INTO empresa_usuaria (nome, cnpj, email) "
+                    "VALUES (%s, %s, %s)",
+                    (empresa.nome, empresa.cnpj, empresa.email),
+                )
+                empresa_id = cur.lastrowid
+            else:
+                cur.execute(
+                    "SELECT id FROM empresa_usuaria WHERE id = %s FOR UPDATE",
+                    (empresa_id,),
+                )
+                if cur.fetchone() is None:
+                    raise EmpresaUsuariaNaoEncontradaError(
+                        f"Empresa usuária {empresa_id} não existe"
+                    )
+                cur.execute(
+                    "UPDATE empresa_usuaria SET nome = %s, cnpj = %s, email = %s "
+                    "WHERE id = %s",
+                    (empresa.nome, empresa.cnpj, empresa.email, empresa_id),
+                )
+
+        empresa.id = empresa_id
+        return empresa
+
+    def salvar_produto(self, produto: Produto) -> Produto:
+        with self._transacao() as cur:
+            cur.execute(
+                "SELECT id FROM empresa_usuaria WHERE id = %s",
+                (produto.empresa_usuaria_id,),
+            )
+            if cur.fetchone() is None:
+                raise EmpresaUsuariaNaoEncontradaError(
+                    f"Empresa usuária {produto.empresa_usuaria_id} não existe"
+                )
+
+            if produto.id is None:
+                cur.execute(
+                    "INSERT INTO produto (empresa_usuaria_id, nome, descricao) "
+                    "VALUES (%s, %s, %s)",
+                    (produto.empresa_usuaria_id, produto.nome, produto.descricao),
+                )
+                produto_id = cur.lastrowid
+            else:
+                cur.execute(
+                    "SELECT id FROM produto WHERE id = %s AND empresa_usuaria_id = %s "
+                    "FOR UPDATE",
+                    (produto.id, produto.empresa_usuaria_id),
+                )
+                if cur.fetchone() is None:
+                    raise ProdutoNaoEncontradoError(
+                        f"Produto {produto.id} não existe e não pode ser atualizado"
+                    )
+                cur.execute(
+                    "UPDATE produto SET nome = %s, descricao = %s WHERE id = %s",
+                    (produto.nome, produto.descricao, produto.id),
+                )
+                produto_id = produto.id
+
+        produto.id = produto_id
+        return produto
+
+    def buscar_produto(self, produto_id: int, empresa_usuaria_id: int) -> Produto:
+        with self._transacao() as cur:
+            produtos = self._ler_produtos(
+                cur, "WHERE id = %s AND empresa_usuaria_id = %s",
+                (produto_id, empresa_usuaria_id),
+            )
+        if not produtos:
+            raise ProdutoNaoEncontradoError(f"Produto {produto_id} não encontrado")
+        return produtos[0]
+
+    def listar_produtos(self, empresa_usuaria_id: int) -> list[Produto]:
+        with self._transacao() as cur:
+            return self._ler_produtos(
+                cur, "WHERE empresa_usuaria_id = %s", (empresa_usuaria_id,)
+            )
+
+    @staticmethod
+    def _ler_produtos(cur, filtro: str, parametros: tuple) -> list[Produto]:
+        cur.execute(
+            f"SELECT id, empresa_usuaria_id, nome, descricao FROM produto "
+            f"{filtro} ORDER BY id",
+            parametros,
+        )
+        return [
+            Produto(id=id_, empresa_usuaria_id=empresa_id, nome=nome,
+                    descricao=descricao)
+            for id_, empresa_id, nome, descricao in cur.fetchall()
+        ]
 
     # =====================================================================
     # Empresas
@@ -610,10 +769,16 @@ def _traduzir_erro(erro: pymysql.MySQLError) -> Exception:
             return PerfilInvalidoError(
                 "Já existe um perfil com esse nome para a empresa usuária"
             )
+        if "uq_produto_empresa_nome" in mensagem:
+            return DuplicadoError("A empresa já tem um produto com esse nome")
+        if "empresa_usuaria.cnpj" in mensagem:
+            return DuplicadoError("Já existe uma empresa usuária com esse CNPJ")
+        if "empresa_usuaria.email" in mensagem:
+            return DuplicadoError("Já existe uma empresa usuária com esse e-mail")
         return PersistenciaError(f"Registro duplicado: {mensagem}")
 
     if codigo == _FK_FILHO:
-        return PersistenciaError(
+        return ReferenciaInexistenteError(
             f"Referência inexistente: {mensagem}{_DICA_DOMINIOS}"
         )
 
