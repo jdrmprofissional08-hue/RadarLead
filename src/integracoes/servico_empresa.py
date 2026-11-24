@@ -21,6 +21,18 @@ class ServicoConsultaEmpresa:
         dados_cnpj = self.cliente.consultar_cnpj(cnpj)
         empresa = self.normalizador.normalizar_cnpj(dados_cnpj)
 
+        # Confere se a API retornou o CNPJ solicitado.
+        cnpj_solicitado = cnpj.strip()
+        cnpj_solicitado = cnpj_solicitado.replace(".", "")
+        cnpj_solicitado = cnpj_solicitado.replace("/", "")
+        cnpj_solicitado = cnpj_solicitado.replace("-", "")
+
+        if empresa["cnpj"] != cnpj_solicitado:
+            raise ValueError(
+                "O CNPJ retornado nao corresponde ao solicitado"
+            )
+
+
         # 2. Verifica se existe um CEP para consultar.
         cep = empresa.get("cep")
 

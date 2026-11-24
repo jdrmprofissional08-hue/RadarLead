@@ -102,6 +102,14 @@ class TestServicoConsultaEmpresa(unittest.TestCase):
             dados_recebidos["latitude"], -18.16
         )
 
+    def test_cnpj_retorno_divergente(self):
+        # Simula a API retornando outro CNPJ.
+        self.dados_cnpj["cnpj"] = "99999999000199"
+
+        # O servico deve rejeitar a divergencia.
+        with self.assertRaises(ValueError):
+            self.servico.consultar_dados("19131243000197")
+
 
 if __name__ == "__main__":
     unittest.main()
