@@ -3,7 +3,13 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from src.integracoes.servico_importacao import ServicoImportacaoEmpresas
+from src.integracoes.servico_importacao import (
+    ServicoImportacaoEmpresas
+)
+
+
+class EmpresaNaoEncontradaSimulada(Exception):
+    pass
 
 
 class TestServicoImportacaoEmpresas(unittest.TestCase):
@@ -11,7 +17,20 @@ class TestServicoImportacaoEmpresas(unittest.TestCase):
     def setUp(self):
         self.consulta = Mock()
         self.repositorio = Mock()
-        self.repositorio.listar_empresas.return_value = []
+
+        # Simula os CNPJs que ja existem no banco.
+        self.existentes = set()
+
+        def buscar_empresa(cnpj):
+            if cnpj not in self.existentes:
+                raise EmpresaNaoEncontradaSimulada(
+                    "Empresa nao encontrada"
+                )
+            return SimpleNamespace(cnpj=cnpj)
+
+        self.repositorio.buscar_empresa.side_effect = (
+            buscar_empresa
+        )
 
         def consultar(cnpj, classe_empresa=None):
             return SimpleNamespace(cnpj=cnpj)
@@ -20,7 +39,10 @@ class TestServicoImportacaoEmpresas(unittest.TestCase):
 
         self.servico = ServicoImportacaoEmpresas(
             self.consulta,
-            self.repositorio
+            self.repositorio,
+            erros_empresa_nao_encontrada=(
+                EmpresaNaoEncontradaSimulada,
+            )
         )
 
     def test_importacao_de_duas_empresas(self):
@@ -31,7 +53,8 @@ class TestServicoImportacaoEmpresas(unittest.TestCase):
 
         self.assertEqual(len(resultado["importados"]), 2)
         self.assertEqual(
-            self.repositorio.salvar_empresa.call_count, 2
+            self.repositorio.salvar_empresa.call_count,
+            2
         )
 
     def test_nao_importar_cnpj_duplicado(self):
@@ -42,6 +65,7 @@ class TestServicoImportacaoEmpresas(unittest.TestCase):
 
         self.assertEqual(len(resultado["importados"]), 1)
         self.assertEqual(len(resultado["duplicados"]), 1)
+
         self.repositorio.salvar_empresa.assert_called_once()
 
     def test_falha_nao_interrompe_importacao(self):
@@ -60,6 +84,7 @@ class TestServicoImportacaoEmpresas(unittest.TestCase):
 
         self.assertEqual(len(resultado["falhas"]), 1)
         self.assertEqual(len(resultado["importados"]), 1)
+
         self.repositorio.salvar_empresa.assert_called_once()
 
     def test_cnpj_invalido(self):
@@ -71,18 +96,17 @@ class TestServicoImportacaoEmpresas(unittest.TestCase):
         self.assertEqual(len(resultado["falhas"]), 1)
         self.assertEqual(len(resultado["importados"]), 1)
 
-
     def test_empresa_ja_cadastrada(self):
         cnpj = "11111111000111"
-
-        self.repositorio.listar_empresas.return_value = [
-            SimpleNamespace(cnpj=cnpj)
-        ]
+        self.existentes.add(cnpj)
 
         resultado = self.servico.importar_cnpjs([cnpj])
 
         self.assertEqual(resultado["importados"], [])
-        self.assertEqual(resultado["ja_cadastrados"], [cnpj])
+        self.assertEqual(
+            resultado["ja_cadastrados"],
+            [cnpj]
+        )
 
         self.consulta.consultar_empresa.assert_not_called()
         self.repositorio.salvar_empresa.assert_not_called()
@@ -91,33 +115,35 @@ class TestServicoImportacaoEmpresas(unittest.TestCase):
         existente = "11111111000111"
         nova = "22222222000122"
 
-        self.repositorio.listar_empresas.return_value = [
-            SimpleNamespace(cnpj=existente)
-        ]
+        self.existentes.add(existente)
 
         resultado = self.servico.importar_cnpjs([
             existente,
             nova
         ])
 
-        self.assertEqual(resultado["ja_cadastrados"], [existente])
+        self.assertEqual(
+            resultado["ja_cadastrados"],
+            [existente]
+        )
         self.assertEqual(resultado["importados"], [nova])
 
         self.assertEqual(
-            self.repositorio.salvar_empresa.call_count, 1
+            self.repositorio.salvar_empresa.call_count,
+            1
         )
 
-
     def test_erro_de_dominio_nao_interrompe_importacao(self):
-
         class ErroDeDominioSimulado(Exception):
             pass
 
-        # Informa ao servico qual excecao deve tratar.
         self.servico = ServicoImportacaoEmpresas(
             self.consulta,
             self.repositorio,
-            erros_dominio=(ErroDeDominioSimulado,)
+            erros_dominio=(ErroDeDominioSimulado,),
+            erros_empresa_nao_encontrada=(
+                EmpresaNaoEncontradaSimulada,
+            )
         )
 
         def consultar(cnpj, classe_empresa=None):
@@ -140,16 +166,33 @@ class TestServicoImportacaoEmpresas(unittest.TestCase):
             resultado["importados"],
             ["11111111000111", "33333333000133"]
         )
-
-        self.assertEqual(
-            len(resultado["falhas"]),
-            1
-        )
-
+        self.assertEqual(len(resultado["falhas"]), 1)
         self.assertEqual(
             self.repositorio.salvar_empresa.call_count,
             2
         )
+
+    def test_verifica_existente_sem_listar_todas(self):
+        cnpj = "11111111000111"
+        self.existentes.add(cnpj)
+
+        # Se o importador tentar carregar tudo, o teste falha.
+        self.repositorio.listar_empresas.side_effect = (
+            AssertionError("Nao deve listar todas as empresas")
+        )
+
+        resultado = self.servico.importar_cnpjs([cnpj])
+
+        self.assertEqual(
+            resultado["ja_cadastrados"],
+            [cnpj]
+        )
+        self.repositorio.buscar_empresa.assert_called_once_with(
+            cnpj
+        )
+        self.repositorio.listar_empresas.assert_not_called()
+        self.consulta.consultar_empresa.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
