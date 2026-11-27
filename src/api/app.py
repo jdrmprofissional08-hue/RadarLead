@@ -95,7 +95,7 @@ def criar_app(
         if origem and ("*" in origens or origem in origens):
             resposta.headers["Access-Control-Allow-Origin"] = origem
             resposta.headers["Vary"] = "Origin"
-            resposta.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            resposta.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS"
             resposta.headers["Access-Control-Allow-Headers"] = "Content-Type"
             resposta.headers["Access-Control-Max-Age"] = "600"
         return resposta

@@ -21,7 +21,7 @@ python -m src.api
 | Opção / variável | Padrão | Para quê |
 |---|---|---|
 | `--host`, `--porta` | `127.0.0.1`, `8000` | onde o servidor escuta |
-| `--demo` | desligado | carrega 6 empresas **fictícias** (ver `src/api/dados_exemplo.py`) |
+| `--demo` | desligado | carrega 7 empresas **fictícias** (ver `src/api/dados_exemplo.py`) |
 | `RADARLEAD_MYSQL_URL` | vazio (memória) | banco MySQL; sem ele os dados somem ao parar |
 | `RADARLEAD_EMPRESA_USUARIA_ID` | a primeira do banco | id da empresa usuária "atual" (só com MySQL) |
 | `RADARLEAD_CORS_ORIGENS` | `http://localhost:5173,http://127.0.0.1:5173` | origens do frontend liberadas (`*` libera todas) |

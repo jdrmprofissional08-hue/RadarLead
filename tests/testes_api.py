@@ -278,6 +278,7 @@ class TestCors(Base):
         self.assertIn(r.status_code, (200, 204))
         self.assertEqual(r.headers["Access-Control-Allow-Origin"], ORIGEM)
         self.assertIn("POST", r.headers["Access-Control-Allow-Methods"])
+        self.assertIn("PUT", r.headers["Access-Control-Allow-Methods"])
         self.assertIn("Content-Type", r.headers["Access-Control-Allow-Headers"])
 
     def test_erros_tambem_levam_cors(self):
