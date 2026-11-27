@@ -3,6 +3,8 @@ import unittest
 
 from src.Recomendadores.base import Recomendador
 from src.Recomendadores.classificador import ClassificadorPorConteudo
+from src.Recomendadores.similaridade import RecomendadorKNN
+from src.Recomendadores.hibrido import RecomendadorHibrido
 
 
 class TestRecomendador(unittest.TestCase):
@@ -42,24 +44,36 @@ class TestRecomendador(unittest.TestCase):
 
     def test_heranca(self):
         self.assertIsInstance(
-            self.classificador, Recomendador
+            self.classificador,
+            Recomendador
         )
 
     def test_pontuacao_maxima(self):
         resultado = self.classificador.classificar(
-            self.empresas[0], self.perfil
+            self.empresas[0],
+            self.perfil
         )
-        self.assertEqual(resultado["pontuacao"], 100)
+
+        self.assertEqual(
+            resultado["pontuacao"],
+            100
+        )
 
     def test_pontuacao_parcial(self):
         resultado = self.classificador.classificar(
-            self.empresas[1], self.perfil
+            self.empresas[1],
+            self.perfil
         )
-        self.assertEqual(resultado["pontuacao"], 75)
+
+        self.assertEqual(
+            resultado["pontuacao"],
+            75
+        )
 
     def test_ordenacao(self):
         resultados = self.classificador.recomendar(
-            self.empresas, self.perfil
+            self.empresas,
+            self.perfil
         )
 
         self.assertEqual(
@@ -69,13 +83,79 @@ class TestRecomendador(unittest.TestCase):
 
     def test_lista_vazia(self):
         resultados = self.classificador.recomendar(
-            [], self.perfil
+            [],
+            self.perfil
         )
+
         self.assertEqual(resultados, [])
 
     def test_interface_abstrata(self):
         with self.assertRaises(TypeError):
             Recomendador()
+
+    def test_polimorfismo_tres_implementacoes(self):
+        """
+        Demonstra polimorfismo em três classes
+        que herdam da mesma abstração.
+
+        Todas recebem os mesmos argumentos e
+        respondem ao método recomendar().
+        """
+
+        historico = [
+            {
+                **self.empresas[1],
+                "converteu": True
+            }
+        ]
+
+        recomendadores = [
+            ClassificadorPorConteudo(),
+            RecomendadorKNN(
+                historico=historico,
+                k=1
+            ),
+            RecomendadorHibrido(
+                historico=historico,
+                k=1
+            )
+        ]
+
+        for recomendador in recomendadores:
+
+            with self.subTest(
+                estrategia=type(recomendador).__name__
+            ):
+
+                self.assertIsInstance(
+                    recomendador,
+                    Recomendador
+                )
+
+                resultados = recomendador.recomendar(
+                    [self.empresas[0]],
+                    self.perfil
+                )
+
+                self.assertEqual(
+                    len(resultados),
+                    1
+                )
+
+                self.assertEqual(
+                    resultados[0]["cnpj"],
+                    self.empresas[0]["cnpj"]
+                )
+
+                self.assertGreaterEqual(
+                    resultados[0]["pontuacao"],
+                    0
+                )
+
+                self.assertLessEqual(
+                    resultados[0]["pontuacao"],
+                    100
+                )
 
 
 if __name__ == "__main__":

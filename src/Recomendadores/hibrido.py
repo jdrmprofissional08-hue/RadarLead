@@ -42,15 +42,29 @@ class RecomendadorHibrido(Recomendador):
             for nome, padrao in campos
         ]
 
-        if (
-            any(
-                type(p) is not int or not 0 <= p <= 100
-                for p in pesos
-            )
-            or sum(pesos) != 100
+        # Aceita inteiros e decimais com até duas casas.
+        # A soma deve ser 100.
+        for peso in pesos:
+            if (
+                isinstance(peso, bool)
+                or not isinstance(peso, (int, float))
+                or not math.isfinite(peso)
+                or not 0 <= peso <= 100
+                or round(peso, 2) != peso
+            ):
+                raise ValueError(
+                    "Pesos devem ser números entre 0 e 100 "
+                    "com até duas casas decimais"
+                )
+
+        if not math.isclose(
+            sum(pesos),
+            100,
+            rel_tol=0,
+            abs_tol=1e-9
         ):
             raise ValueError(
-                "Pesos devem ser inteiros entre 0 e 100 e somar 100"
+                "A soma dos pesos deve ser 100"
             )
 
         cnaes = perfil.get("cnaes_desejados")
@@ -79,7 +93,7 @@ class RecomendadorHibrido(Recomendador):
         if not empresas:
             return []
 
-        # Padroniza os dados sem modificar a lista original
+        # Padroniza os dados sem modificar a lista original.
         empresas_normalizadas = []
 
         for empresa in empresas:
@@ -100,7 +114,7 @@ class RecomendadorHibrido(Recomendador):
             )
         )
 
-        # Classificador de conteúdo usa os pesos do perfil
+        # Classificador de conteúdo usa os pesos do perfil.
         classificador = ClassificadorPorConteudo(*pesos)
 
         resultados_conteudo = classificador.recomendar(
@@ -177,3 +191,4 @@ class RecomendadorHibrido(Recomendador):
         )
 
         return resultados_finais
+

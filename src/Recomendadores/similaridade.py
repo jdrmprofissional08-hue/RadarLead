@@ -1,4 +1,7 @@
 
+
+import math
+
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import OrdinalEncoder
@@ -71,15 +74,29 @@ class RecomendadorKNN(Recomendador):
             for nome, default in zip(nomes, padrao)
         ]
 
-        if (
-            any(
-                type(v) is not int or v < 0 or v > 100
-                for v in valores
-            )
-            or sum(valores) != 100
+        # Aceita pesos decimais e mantém a mesma
+        # validação utilizada no domínio Perfil.
+        for valor in valores:
+            if (
+                isinstance(valor, bool)
+                or not isinstance(valor, (int, float))
+                or not math.isfinite(valor)
+                or not 0 <= valor <= 100
+                or round(valor, 2) != valor
+            ):
+                raise ValueError(
+                    "Pesos devem ser números entre 0 e 100 "
+                    "com até duas casas decimais"
+                )
+
+        if not math.isclose(
+            sum(valores),
+            100,
+            rel_tol=0,
+            abs_tol=1e-9
         ):
             raise ValueError(
-                "Os pesos devem ser inteiros de 0 a 100 e somar 100"
+                "A soma dos pesos deve ser 100"
             )
 
         return np.asarray(valores, dtype=float) / 100.0
@@ -139,7 +156,7 @@ class RecomendadorKNN(Recomendador):
         for item in empresas:
             candidata = self._preparar_empresa(item)
 
-            # Exclui a própria empresa do histórico
+            # Exclui a própria empresa do histórico.
             treino = [
                 h for h in self.historico
                 if h["cnpj"] != candidata["cnpj"]
@@ -204,4 +221,3 @@ class RecomendadorKNN(Recomendador):
             key=lambda r: r["pontuacao"],
             reverse=True
         )
-

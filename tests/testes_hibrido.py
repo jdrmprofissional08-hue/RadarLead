@@ -162,6 +162,25 @@ class TestRecomendadorHibrido(unittest.TestCase):
 
         self.assertEqual(resultado[0]["pontuacao"], 85)
 
+    def test_pesos_decimais(self):
+        perfil = dict(self.perfil)
+
+        perfil["peso_cnae"] = 33.33
+        perfil["peso_porte"] = 33.33
+        perfil["peso_localizacao"] = 33.34
+
+        hibrido = RecomendadorHibrido()
+
+        resultado = hibrido.recomendar(
+            [self.candidata],
+            perfil
+        )
+
+        self.assertEqual(
+            resultado[0]["pontuacao"],
+            100
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
